@@ -49,7 +49,10 @@
             <form id="add-timer-form">
                 <div class="mb-4">
                     <label for="fort-name" class="block text-gray-400 mb-2">Fort Name</label>
-                    <input type="text" id="fort-name" name="fort-name" class="w-full bg-gray-700 text-white rounded-lg p-2 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500" required placeholder="e.g., Antharas Lair">
+                    <input type="text" id="fort-name" list="fort-list" name="fort-name" class="w-full bg-gray-700 text-white rounded-lg p-2 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500" required placeholder="Select or type a fort name...">
+                    <datalist id="fort-list">
+                        <!-- Options will be populated by JS -->
+                    </datalist>
                 </div>
                 <div class="mb-6">
                     <label for="start-time" class="block text-gray-400 mb-2">Fort Start Time (Your Local Time)</label>
@@ -75,6 +78,17 @@
         </div>
     </div>
 
+    <!-- Teleport Info Modal -->
+    <div id="teleport-modal" class="fixed inset-0 z-40 items-center justify-center hidden modal-bg">
+        <div class="bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-md mx-4 border border-gray-700">
+            <h2 id="teleport-modal-title" class="text-2xl font-bold font-cinzel text-white mb-4">Teleport Route</h2>
+            <p id="teleport-modal-route" class="text-gray-300 text-lg mb-6"></p>
+            <div class="flex justify-end">
+                <button type="button" id="close-teleport-btn" class="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -92,6 +106,32 @@
             measurementId: "G-LGR62TCPFF"
         };
         
+        // --- Fort Data ---
+        const fortTeleports = {
+            "Southern Fortress": "Gludin > Southern Fortress",
+            "Dion Fortress": "Dion > Cruma Tower",
+            "Giran Fortress": "Giran > Giran Harbor",
+            "Oren Fortress": "Oren > Ivory Tower",
+            "Hunters Fortress": "Hunters Village > Hunters Valley (North)",
+            "Aaru Fortress": "Aden > Enchanted Valley (South)",
+            "Demon Fortress": "Aden > The Cemetery",
+            "Monastic Fortress": "Rune > Forest of the Dead",
+            "Dragonspine Fortress": "Goddard > Ketra Orc Outpost",
+            "Antharas' Lair Fortress": "Giran > Antharas' Lair",
+            "Western Fortress": "Gludio > Ruins of Agony",
+            "Floran Fortress": "Dion > Floran Village",
+            "Cloud Mountain Fortress": "Dark Elf Village > Spider Nest",
+            "Valley Fortress": "Rune > Valley of Saints",
+            "Tanor Fortress": "Goddard > Varka Silenos Barracks",
+            "Ivory Tower Fortress": "Oren > Ivory Tower Crater (North)",
+            "Narsell Fortress": "Elven Village > Elven Fortress",
+            "Bayou Fortress": "Heine > Alligator Island",
+            "White Sands Fortress": "Schuttgart > Plunderous Plains",
+
+            "Borderland Fortress": "Aden > Border Outpost",
+            "Swamp Fortress": "Heine > Field of Whispers"
+        };
+
         // --- Initialize Firebase ---
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -132,26 +172,26 @@
                 card.className = 'bg-gray-800 p-5 rounded-lg shadow-lg border border-gray-700 flex flex-col';
                 card.id = doc.id;
 
+                const startTime = timer.startTime.toDate();
                 const endTime = timer.endTime.toDate();
                 
-                const formatOptions = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true };
-                
-                const startTimeLocal = timer.startTime.toDate().toLocaleString(undefined, formatOptions);
-                const endTimeLocal = endTime.toLocaleString(undefined, formatOptions);
-                
-                const startTimeUTC = timer.startTime.toDate().toUTCString().slice(5, 22);
-                const endTimeUTC = endTime.toUTCString().slice(5, 22);
+                const formatOptions = { hour: '2-digit', minute: '2-digit', hour12: false };
+                const startTimeLocal = startTime.toLocaleTimeString([], formatOptions);
+                const startTimeUTC = startTime.getUTCHours().toString().padStart(2, '0') + ':' + startTime.getUTCMinutes().toString().padStart(2, '0');
 
                 card.innerHTML = `
                     <div class="flex-grow">
                         <h3 class="text-2xl font-bold font-cinzel text-white mb-2">${timer.name}</h3>
-                        <div id="countdown-${doc.id}" class="text-4xl font-bold text-red-500 mb-4">--:--:--</div>
+                        <div id="countdown-label-${doc.id}" class="text-sm text-gray-400"></div>
+                        <div id="countdown-timer-${doc.id}" class="text-4xl font-bold text-red-500 mb-4">--:--:--</div>
                         <div class="text-sm text-gray-400 space-y-2">
-                            <p><strong>Starts:</strong> ${startTimeLocal} <span class="text-gray-500">(${startTimeUTC} UTC)</span></p>
-                            <p><strong>Ends:</strong> ${endTimeLocal} <span class="text-gray-500">(${endTimeUTC} UTC)</span></p>
+                             <p><strong>Start Time:</strong> ${startTimeLocal} LOCAL / ${startTimeUTC} UTC</p>
                         </div>
                     </div>
-                    <div class="mt-4 pt-4 border-t border-gray-700">
+                    <div class="mt-4 pt-4 border-t border-gray-700 flex flex-col space-y-2">
+                        <button data-fortname="${timer.name}" class="teleport-btn w-full bg-blue-900/50 hover:bg-blue-900/80 text-blue-300 font-bold py-2 px-4 rounded-lg transition-colors">
+                            How to get there
+                        </button>
                         <button data-id="${doc.id}" class="delete-btn w-full bg-red-900/50 hover:bg-red-900/80 text-red-300 font-bold py-2 px-4 rounded-lg transition-colors">
                             Delete
                         </button>
@@ -159,31 +199,45 @@
                 `;
                 timersContainer.appendChild(card);
 
-                updateCountdown(doc.id, endTime);
-                const intervalId = setInterval(() => updateCountdown(doc.id, endTime), 1000);
+                const intervalId = setInterval(() => updateCardState(doc.id, startTime, endTime), 1000);
                 intervals.set(doc.id, intervalId);
+                updateCardState(doc.id, startTime, endTime); // Initial call
             });
         }
 
         // --- Countdown Logic ---
-        function updateCountdown(docId, endTime) {
-            const countdownElement = document.getElementById(`countdown-${docId}`);
-            if (!countdownElement) return;
+        function formatTime(ms) {
+            const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((ms % (1000 * 60)) / 1000);
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        function updateCardState(docId, startTime, endTime) {
+            const labelEl = document.getElementById(`countdown-label-${docId}`);
+            const timerEl = document.getElementById(`countdown-timer-${docId}`);
+            if (!labelEl || !timerEl) return;
 
             const now = new Date();
-            const distance = endTime - now;
+            const timeToStart = startTime - now;
+            const timeToEnd = endTime - now;
 
-            if (distance < 0) {
-                countdownElement.innerHTML = "Fort Ended";
-                return;
+            if (timeToStart > 0) {
+                labelEl.textContent = 'Starts in:';
+                timerEl.textContent = formatTime(timeToStart);
+                timerEl.classList.remove('text-green-500', 'text-gray-500');
+                timerEl.classList.add('text-red-500');
+            } else if (timeToEnd > 0) {
+                labelEl.textContent = 'Ends in:';
+                timerEl.textContent = formatTime(timeToEnd);
+                timerEl.classList.remove('text-red-500', 'text-gray-500');
+                timerEl.classList.add('text-green-500');
+            } else {
+                labelEl.textContent = 'Status:';
+                timerEl.textContent = 'Fort Ended';
+                timerEl.classList.remove('text-red-500', 'text-green-500');
+                timerEl.classList.add('text-gray-500');
             }
-
-            const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-
-            countdownElement.textContent = 
-                `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         }
 
         // --- Firestore Real-time Listener ---
@@ -193,7 +247,6 @@
                 renderTimers(snapshot.docs);
             }, (error) => {
                 console.error("Error listening to fort timers:", error);
-                // This error often means an index is needed. The console will provide a link to create it.
             });
         }
         
@@ -219,12 +272,7 @@
         };
 
         cancelBtn.onclick = closeModal;
-        window.onclick = (event) => {
-            if (event.target == modal) {
-                closeModal();
-            }
-        };
-
+        
         // --- Form Submission ---
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -260,14 +308,6 @@
         const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
         let timerIdToDelete = null;
 
-        timersContainer.addEventListener('click', (e) => {
-            if (e.target && e.target.classList.contains('delete-btn')) {
-                timerIdToDelete = e.target.dataset.id;
-                deleteModal.classList.remove('hidden');
-                deleteModal.classList.add('flex');
-            }
-        });
-
         const closeDeleteModal = () => {
             timerIdToDelete = null;
             deleteModal.classList.add('hidden');
@@ -290,8 +330,66 @@
             }
         };
 
+        // --- Teleport Info Modal ---
+        const teleportModal = document.getElementById('teleport-modal');
+        const teleportModalTitle = document.getElementById('teleport-modal-title');
+        const teleportModalRoute = document.getElementById('teleport-modal-route');
+        const closeTeleportBtn = document.getElementById('close-teleport-btn');
+
+        const closeTeleportModal = () => {
+            teleportModal.classList.add('hidden');
+            teleportModal.classList.remove('flex');
+        };
+        
+        closeTeleportBtn.onclick = closeTeleportModal;
+
+        // --- Event Delegation for Buttons ---
+        timersContainer.addEventListener('click', (e) => {
+            const target = e.target;
+            if (target && target.classList.contains('delete-btn')) {
+                timerIdToDelete = target.dataset.id;
+                deleteModal.classList.remove('hidden');
+                deleteModal.classList.add('flex');
+            }
+            if (target && target.classList.contains('teleport-btn')) {
+                const fortName = target.dataset.fortname;
+                const route = fortTeleports[fortName] || "No teleport information available.";
+                teleportModalTitle.textContent = `${fortName} Route`;
+                teleportModalRoute.textContent = route;
+                teleportModal.classList.remove('hidden');
+                teleportModal.classList.add('flex');
+            }
+        });
+        
+        // Close modals with Escape key or clicking outside
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+                closeDeleteModal();
+                closeTeleportModal();
+            }
+        });
+        window.addEventListener('click', (e) => {
+            if (e.target === modal || e.target === deleteModal || e.target === teleportModal) {
+                closeModal();
+                closeDeleteModal();
+                closeTeleportModal();
+            }
+        });
+
+        // --- Populate Datalist ---
+        function populateFortList() {
+            const datalist = document.getElementById('fort-list');
+            Object.keys(fortTeleports).forEach(fortName => {
+                const option = document.createElement('option');
+                option.value = fortName;
+                datalist.appendChild(option);
+            });
+        }
+
         // --- Initialize App ---
         (async () => {
+            populateFortList();
             await authenticate();
             listenForTimers();
         })();
