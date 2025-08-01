@@ -70,20 +70,16 @@
         import { getFirestore, collection, addDoc, onSnapshot, Timestamp, query, orderBy, deleteDoc, doc, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Configuration ---
-        const firebaseConfig = typeof __firebase_config !== 'undefined' 
-            ? JSON.parse(__firebase_config) 
-            : {
-                apiKey: "AIzaSyD_plNkepeSFmiEY9BL3SDLcv9HHRt5dbo",
-                authDomain: "forts-5d0fc.firebaseapp.com",
-                projectId: "forts-5d0fc",
-                storageBucket: "forts-5d0fc.appspot.com",
-                messagingSenderId: "782098748390",
-                appId: "1:782098748390:web:9975a02d85d71fb769bc27",
-                measurementId: "G-LGR62TCPFF"
-              };
+        const firebaseConfig = {
+            apiKey: "AIzaSyD_plNkepeSFmiEY9BL3SDLcv9HHRt5dbo",
+            authDomain: "forts-5d0fc.firebaseapp.com",
+            projectId: "forts-5d0fc",
+            storageBucket: "forts-5d0fc.appspot.com",
+            messagingSenderId: "782098748390",
+            appId: "1:782098748390:web:9975a02d85d71fb769bc27",
+            measurementId: "G-LGR62TCPFF"
+        };
         
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
         // --- Initialize Firebase ---
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -92,11 +88,8 @@
         // --- Authentication ---
         async function authenticate() {
             try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
+                // For standalone apps, we'll just sign in anonymously.
+                await signInAnonymously(auth);
             } catch (error) {
                 console.error("Authentication failed:", error);
             }
@@ -108,8 +101,8 @@
         const intervals = new Map(); // To store countdown intervals
 
         // --- Firestore Collection Reference ---
-        const fortsCollectionPath = `/artifacts/${appId}/public/data/forts`;
-        const fortsCollection = collection(db, fortsCollectionPath);
+        // This is the corrected, simpler path for your live project.
+        const fortsCollection = collection(db, "forts");
 
         // --- Main Function to Render Timers ---
         function renderTimers(docs) {
@@ -184,6 +177,9 @@
 
         // --- Firestore Real-time Listener ---
         function listenForTimers() {
+            // Note: This query requires a Firestore index. If it fails,
+            // check the browser's developer console for an error message
+            // with a link to create the index automatically.
             const q = query(fortsCollection, orderBy("startTime", "asc"));
             onSnapshot(q, (snapshot) => {
                 renderTimers(snapshot.docs);
