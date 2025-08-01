@@ -46,13 +46,13 @@
     <div id="modal" class="fixed inset-0 z-30 items-center justify-center hidden modal-bg">
         <div class="bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-md mx-4 border border-gray-700">
             <h2 class="text-2xl font-bold font-cinzel text-white mb-4">Add New Fort Timer</h2>
-            <form id="add-timer-form">
-                <div class="mb-4">
+            <form id="add-timer-form" autocomplete="off">
+                <div class="mb-4 relative" id="custom-dropdown-container">
                     <label for="fort-name" class="block text-gray-400 mb-2">Fort Name</label>
-                    <input type="text" id="fort-name" list="fort-list" name="fort-name" class="w-full bg-gray-700 text-white rounded-lg p-2 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500" required placeholder="Select or type a fort name...">
-                    <datalist id="fort-list">
-                        <!-- Options will be populated by JS -->
-                    </datalist>
+                    <input type="text" id="fort-name" name="fort-name" class="w-full bg-gray-700 text-white rounded-lg p-2 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500" required placeholder="Select or type a fort name...">
+                    <div id="custom-dropdown-list" class="absolute hidden w-full mt-1 bg-gray-700 border border-gray-600 rounded-lg z-10 max-h-60 overflow-y-auto">
+                        <!-- Custom dropdown options will be populated by JS -->
+                    </div>
                 </div>
                 <div class="mb-6">
                     <label for="start-time" class="block text-gray-400 mb-2">Fort Start Time (Your Local Time)</label>
@@ -127,7 +127,6 @@
             "Narsell Fortress": "Elven Village > Elven Fortress",
             "Bayou Fortress": "Heine > Alligator Island",
             "White Sands Fortress": "Schuttgart > Plunderous Plains",
-
             "Borderland Fortress": "Aden > Border Outpost",
             "Swamp Fortress": "Heine > Field of Whispers"
         };
@@ -250,12 +249,15 @@
             });
         }
         
-        // --- Add Timer Modal Handling ---
+        // --- Add Timer Modal & Custom Dropdown ---
         const modal = document.getElementById('modal');
         const addTimerBtn = document.getElementById('addTimerBtn');
         const cancelBtn = document.getElementById('cancelBtn');
         const form = document.getElementById('add-timer-form');
         const startTimeInput = document.getElementById('start-time');
+        const fortNameInput = document.getElementById('fort-name');
+        const customDropdownList = document.getElementById('custom-dropdown-list');
+        const customDropdownContainer = document.getElementById('custom-dropdown-container');
 
         addTimerBtn.onclick = () => {
             const now = new Date();
@@ -276,7 +278,7 @@
         // --- Form Submission ---
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const fortName = document.getElementById('fort-name').value;
+            const fortName = fortNameInput.value;
             const startTimeValue = startTimeInput.value;
 
             if (!fortName || !startTimeValue) {
@@ -345,13 +347,15 @@
 
         // --- Event Delegation for Buttons ---
         timersContainer.addEventListener('click', (e) => {
-            const target = e.target;
-            if (target && target.classList.contains('delete-btn')) {
+            const target = e.target.closest('button'); // More robust way to get button
+            if (!target) return;
+
+            if (target.classList.contains('delete-btn')) {
                 timerIdToDelete = target.dataset.id;
                 deleteModal.classList.remove('hidden');
                 deleteModal.classList.add('flex');
             }
-            if (target && target.classList.contains('teleport-btn')) {
+            if (target.classList.contains('teleport-btn')) {
                 const fortName = target.dataset.fortname;
                 const route = fortTeleports[fortName] || "No teleport information available.";
                 teleportModalTitle.textContent = `${fortName} Route`;
@@ -361,7 +365,50 @@
             }
         });
         
-        // Close modals with Escape key or clicking outside
+        // --- Custom Dropdown Logic ---
+        function populateFortList() {
+            customDropdownList.innerHTML = '';
+            Object.keys(fortTeleports).forEach(fortName => {
+                const item = document.createElement('div');
+                item.textContent = fortName;
+                item.className = 'p-2 hover:bg-gray-600 cursor-pointer';
+                item.addEventListener('click', () => {
+                    fortNameInput.value = fortName;
+                    customDropdownList.classList.add('hidden');
+                });
+                customDropdownList.appendChild(item);
+            });
+        }
+
+        fortNameInput.addEventListener('input', () => {
+            const filter = fortNameInput.value.toLowerCase();
+            const items = customDropdownList.getElementsByTagName('div');
+            for (let i = 0; i < items.length; i++) {
+                const txtValue = items[i].textContent || items[i].innerText;
+                if (txtValue.toLowerCase().indexOf(filter) > -1) {
+                    items[i].style.display = "";
+                } else {
+                    items[i].style.display = "none";
+                }
+            }
+        });
+
+        fortNameInput.addEventListener('focus', () => {
+            customDropdownList.classList.remove('hidden');
+        });
+
+        // Close dropdowns when clicking outside
+        window.addEventListener('click', (e) => {
+            if (!customDropdownContainer.contains(e.target)) {
+                 customDropdownList.classList.add('hidden');
+            }
+            if (e.target === modal || e.target === deleteModal || e.target === teleportModal) {
+                closeModal();
+                closeDeleteModal();
+                closeTeleportModal();
+            }
+        });
+        
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 closeModal();
@@ -369,23 +416,6 @@
                 closeTeleportModal();
             }
         });
-        window.addEventListener('click', (e) => {
-            if (e.target === modal || e.target === deleteModal || e.target === teleportModal) {
-                closeModal();
-                closeDeleteModal();
-                closeTeleportModal();
-            }
-        });
-
-        // --- Populate Datalist ---
-        function populateFortList() {
-            const datalist = document.getElementById('fort-list');
-            Object.keys(fortTeleports).forEach(fortName => {
-                const option = document.createElement('option');
-                option.value = fortName;
-                datalist.appendChild(option);
-            });
-        }
 
         // --- Initialize App ---
         (async () => {
