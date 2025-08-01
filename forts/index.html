@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>L2 Fort Timers</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827;
+        }
+        .font-cinzel { font-family: 'Cinzel', serif; }
+        .modal-bg {
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200">
+
+    <!-- Header -->
+    <header class="bg-gray-900/80 backdrop-blur-sm sticky top-0 z-20 border-b border-gray-700">
+        <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <h1 class="text-3xl font-bold font-cinzel text-white tracking-widest">FORT TIMERS</h1>
+            <button id="addTimerBtn" class="bg-red-700 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-transform hover:scale-105 shadow-lg">
+                Add Fort
+            </button>
+        </nav>
+    </header>
+
+    <!-- Timers Container -->
+    <main class="container mx-auto p-4 md:p-6">
+        <div id="timers-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+            <!-- Timer cards will be injected here by JavaScript -->
+        </div>
+         <div id="no-timers-message" class="hidden text-center py-20">
+            <p class="text-gray-500 text-xl">No active fort timers. Add one to get started!</p>
+        </div>
+    </main>
+
+    <!-- Add Timer Modal -->
+    <div id="modal" class="fixed inset-0 z-30 items-center justify-center hidden modal-bg">
+        <div class="bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-md mx-4 border border-gray-700">
+            <h2 class="text-2xl font-bold font-cinzel text-white mb-4">Add New Fort Timer</h2>
+            <form id="add-timer-form">
+                <div class="mb-4">
+                    <label for="fort-name" class="block text-gray-400 mb-2">Fort Name</label>
+                    <input type="text" id="fort-name" name="fort-name" class="w-full bg-gray-700 text-white rounded-lg p-2 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500" required placeholder="e.g., Antharas Lair">
+                </div>
+                <div class="mb-6">
+                    <label for="start-time" class="block text-gray-400 mb-2">Fort Start Time (Your Local Time)</label>
+                    <input type="datetime-local" id="start-time" name="start-time" class="w-full bg-gray-700 text-white rounded-lg p-2 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500" required>
+                </div>
+                <div class="flex justify-end space-x-4">
+                    <button type="button" id="cancelBtn" class="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Cancel</button>
+                    <button type="submit" class="bg-red-700 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">Save Timer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, Timestamp, query, orderBy, deleteDoc, doc, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Firebase Configuration ---
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : { /* PASTE YOUR FIREBASE CONFIG HERE IF TESTING LOCALLY */ };
+        
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // --- Initialize Firebase ---
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- Authentication ---
+        async function-authenticate() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Authentication failed:", error);
+            }
+        }
+
+        // --- Global Variables ---
+        const timersContainer = document.getElementById('timers-container');
+        const noTimersMessage = document.getElementById('no-timers-message');
+        const intervals = new Map(); // To store countdown intervals
+
+        // --- Firestore Collection Reference ---
+        const fortsCollectionPath = `/artifacts/${appId}/public/data/forts`;
+        const fortsCollection = collection(db, fortsCollectionPath);
+
+        // --- Main Function to Render Timers ---
+        function renderTimers(docs) {
+            timersContainer.innerHTML = '';
+            // Clear all existing countdowns
+            intervals.forEach(clearInterval);
+            intervals.clear();
+
+            if (docs.length === 0) {
+                noTimersMessage.classList.remove('hidden');
+            } else {
+                noTimersMessage.classList.add('hidden');
+            }
+
+            docs.forEach(doc => {
+                const timer = doc.data();
+                const card = document.createElement('div');
+                card.className = 'bg-gray-800 p-5 rounded-lg shadow-lg border border-gray-700 flex flex-col';
+                card.id = doc.id;
+
+                const endTime = timer.endTime.toDate();
+                
+                // Format dates
+                const formatOptions = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true };
+                const localTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                
+                const startTimeLocal = timer.startTime.toDate().toLocaleString(undefined, formatOptions);
+                const endTimeLocal = endTime.toLocaleString(undefined, formatOptions);
+                
+                const startTimeUTC = timer.startTime.toDate().toUTCString().slice(5, 22);
+                const endTimeUTC = endTime.toUTCString().slice(5, 22);
+
+                card.innerHTML = `
+                    <h3 class="text-2xl font-bold font-cinzel text-white mb-2">${timer.name}</h3>
+                    <div id="countdown-${doc.id}" class="text-4xl font-bold text-red-500 mb-4">--:--:--</div>
+                    <div class="text-sm text-gray-400 space-y-2 mt-auto">
+                        <p><strong>Starts:</strong> ${startTimeLocal} <span class="text-gray-500">(${startTimeUTC} UTC)</span></p>
+                        <p><strong>Ends:</strong> ${endTimeLocal} <span class="text-gray-500">(${endTimeUTC} UTC)</span></p>
+                    </div>
+                `;
+                timersContainer.appendChild(card);
+
+                // Start countdown
+                updateCountdown(doc.id, endTime);
+                const intervalId = setInterval(() => updateCountdown(doc.id, endTime), 1000);
+                intervals.set(doc.id, intervalId);
+            });
+        }
+
+        // --- Countdown Logic ---
+        function updateCountdown(docId, endTime) {
+            const countdownElement = document.getElementById(`countdown-${docId}`);
+            if (!countdownElement) return;
+
+            const now = new Date();
+            const distance = endTime - now;
+
+            if (distance < 0) {
+                countdownElement.innerHTML = "Fort Ended";
+                // The TTL policy on Firestore will handle deletion.
+                // No need for client-side deletion logic.
+                return;
+            }
+
+            const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+            countdownElement.textContent = 
+                `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        // --- Firestore Real-time Listener ---
+        function listenForTimers() {
+            const q = query(fortsCollection, orderBy("startTime", "asc"));
+            onSnapshot(q, (snapshot) => {
+                renderTimers(snapshot.docs);
+            }, (error) => {
+                console.error("Error listening to fort timers:", error);
+            });
+        }
+        
+        // --- Modal Handling ---
+        const modal = document.getElementById('modal');
+        const addTimerBtn = document.getElementById('addTimerBtn');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const form = document.getElementById('add-timer-form');
+        const startTimeInput = document.getElementById('start-time');
+
+        addTimerBtn.onclick = () => {
+            // Set default time to now
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            startTimeInput.value = now.toISOString().slice(0, 16);
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        };
+        
+        const closeModal = () => {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            form.reset();
+        };
+
+        cancelBtn.onclick = closeModal;
+        window.onclick = (event) => {
+            if (event.target == modal) {
+                closeModal();
+            }
+        };
+
+        // --- Form Submission ---
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fortName = document.getElementById('fort-name').value;
+            const startTimeValue = startTimeInput.value;
+
+            if (!fortName || !startTimeValue) {
+                alert("Please fill out all fields.");
+                return;
+            }
+
+            const startTime = new Date(startTimeValue);
+            // Fort ends 1 hour after start
+            const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); 
+            // Document is deleted 4.5 hours after fort ends (5.5 hours after start)
+            const deletionTime = new Date(endTime.getTime() + 4.5 * 60 * 60 * 1000);
+
+            try {
+                await addDoc(fortsCollection, {
+                    name: fortName,
+                    startTime: Timestamp.fromDate(startTime),
+                    endTime: Timestamp.fromDate(endTime),
+                    deletionTime: Timestamp.fromDate(deletionTime)
+                });
+                closeModal();
+            } catch (error) {
+                console.error("Error adding document: ", error);
+                alert("Failed to add timer. See console for details.");
+            }
+        });
+
+        // --- Initialize App ---
+        (async () => {
+            await authenticate();
+            listenForTimers();
+        })();
+
+    </script>
+</body>
+</html>
