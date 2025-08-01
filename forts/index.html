@@ -72,7 +72,15 @@
         // --- Firebase Configuration ---
         const firebaseConfig = typeof __firebase_config !== 'undefined' 
             ? JSON.parse(__firebase_config) 
-            : { /* PASTE YOUR FIREBASE CONFIG HERE IF TESTING LOCALLY */ };
+            : {
+                apiKey: "AIzaSyD_plNkepeSFmiEY9BL3SDLcv9HHRt5dbo",
+                authDomain: "forts-5d0fc.firebaseapp.com",
+                projectId: "forts-5d0fc",
+                storageBucket: "forts-5d0fc.appspot.com",
+                messagingSenderId: "782098748390",
+                appId: "1:782098748390:web:9975a02d85d71fb769bc27",
+                measurementId: "G-LGR62TCPFF"
+              };
         
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
@@ -82,7 +90,7 @@
         const db = getFirestore(app);
 
         // --- Authentication ---
-        async function-authenticate() {
+        async function authenticate() {
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
