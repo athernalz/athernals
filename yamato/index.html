@@ -1,152 +1,102 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>yamatosdeath</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    :root { --muted:#94a3b8; --ok:#22c55e; --warn:#ef4444; --edge:#1f2a44; --btn:#2563eb; }
-    *{box-sizing:border-box}
-    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b1020;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#e5e7eb}
-    .card{width:min(720px,92vw);background:linear-gradient(180deg,#0b1224,#0a0f1f);border:1px solid var(--edge);border-radius:16px;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.04)}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0 6px}
-    input[type=text]{background:#0e152b;color:#e5e7eb;border:1px solid #203057;padding:12px 14px;border-radius:10px;outline:none}
-    button{
-      border:1px solid var(--btn); background:var(--btn); color:white;
-      padding:14px 20px; border-radius:10px; cursor:pointer; font-size:16px; font-weight:600; transition:.15s;
-    }
-    button:hover{transform:translateY(-1px);filter:brightness(1.1)}
-    .chip{background:#0e152b;border:1px solid #203057;color:#cbd5e1;padding:6px 10px;border-radius:999px;font-size:12px}
-    .ok{border-color:#1f8a4d;color:#86efac}
-    .warn{border-color:#a62d2d;color:#fca5a5}
-    .divider{height:1px;background:#162244;margin:12px 0}
-    .log{margin-top:12px;font-size:12px;color:#9ca3af;max-height:140px;overflow:auto}
+<script>
+  let ws = null, reconnectTimer = null, backoff = 5000, maxBackoff = 60000;
+  let sawAuthFailure = false;
 
-    /* Volume slider styling */
-    .vol-wrap{display:flex;align-items:center;gap:10px}
-    input[type=range]{width:220px}
-    .lbl{color:var(--muted); font-size:12px}
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="row">
-      <input id="chan" type="text" value="yamatosdeath" />
-      <button id="connect">Connect</button>
-      <span id="status" class="chip">disconnected</span>
-    </div>
+  function send(line){ if(ws && ws.readyState===1){ ws.send(line + "\r\n"); } }
 
-    <div class="row">
-      <button id="enable">Enable sound</button>
-      <span id="sound" class="chip">sound: blocked</span>
-      <span id="streak" class="chip">streak: 0 users</span>
-      <span id="cool" class="chip">cooldown: ready</span>
-    </div>
+  function connect() {
+    const channel = document.getElementById('chan').value.trim().replace(/^#/, '').toLowerCase();
+    if (!channel) return;
+    clearTimeout(reconnectTimer);
+    if (ws) { try { ws.close(); } catch(_){} ws = null; }
 
-    <div class="row vol-wrap">
-      <span class="lbl">Volume</span>
-      <input id="vol" type="range" min="0" max="100" value="80" />
-      <span id="volval" class="chip">80%</span>
-    </div>
+    sawAuthFailure = false;
+    document.getElementById('status').textContent = 'connecting…';
 
-    <div class="divider"></div>
-    <div id="log" class="log" aria-live="polite"></div>
-  </div>
+    const nick = 'justinfan' + Math.floor(Math.random()*1e6);
+    ws = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
 
-  <audio id="crickets" preload="auto">
-    <source src="./crickets.mp3" type="audio/mpeg">
-  </audio>
+    ws.onopen = () => {
+      document.getElementById('status').textContent = 'auth…';
+      // PASS can be any string for justinfan; Twitch ignores it
+      send('PASS SCHMOOPIIE');
+      send('NICK ' + nick);
+      // Optional USER (not required by Twitch, but some proxies like it)
+      send('USER ' + nick + ' 8 * :' + nick);
+      // Ask for tags so we can read display-name
+      send('CAP REQ :twitch.tv/tags twitch.tv/commands');
 
-  <script>
-    const $ = id => document.getElementById(id);
-    const log = m => { const t=new Date().toLocaleTimeString(); $('log').innerHTML += `[${t}] ${m}<br>`; $('log').scrollTop=$('log').scrollHeight; };
-
-    // Sound + volume
-    const audio = $('crickets'); let soundEnabled=false;
-    const vol = $('vol'); const volval = $('volval');
-    function applyVolume(v){ const f = Math.max(0, Math.min(100, v)) / 100; audio.volume = f; volval.textContent = `${Math.round(f*100)}%`; }
-    applyVolume(vol.value);
-    vol.addEventListener('input', e => applyVolume(e.target.value));
-
-    $('enable').onclick = async () => {
-      try{ await audio.play().catch(()=>{}); audio.pause(); soundEnabled=true;
-        $('sound').textContent='sound: enabled'; $('sound').classList.add('ok'); log('Sound enabled');
-      }catch(e){ log('Audio blocked: '+e.message);}
+      // Small delay before JOIN; avoids immediate drops on some edges
+      setTimeout(() => {
+        send('JOIN #' + channel);
+        document.getElementById('status').textContent = 'connected';
+        document.getElementById('status').classList.add('ok');
+        document.getElementById('status').classList.remove('warn');
+        log('Connected as ' + nick + ' to #' + channel);
+        backoff = 5000; // reset backoff on success
+      }, 750);
     };
 
-    // Cooldown
-    let onCooldown=false; const COOLDOWN=5000;
-    async function playCrickets(){
-      if(onCooldown||!soundEnabled) return;
-      onCooldown=true; $('cool').textContent='cooldown: active';
-      try{ await audio.play(); }catch(e){ log('Play failed: '+e.message); }
-      setTimeout(()=>{ onCooldown=false; $('cool').textContent='cooldown: ready'; }, COOLDOWN);
-    }
+    ws.onmessage = (ev) => {
+      // Log raw lines to see reasons coming from Twitch
+      ev.data.split('\r\n').forEach(line => {
+        if (!line) return;
+        // Show control lines
+        if (!line.includes('PRIVMSG')) log('IRC: ' + line);
 
-    // Streak logic
-    let inBlock=false; let users=new Set();
-    function resetStreak(){ inBlock=false; users.clear(); $('streak').textContent='streak: 0 users'; }
-    function onChat(user, msg){
-      if((msg||'').trim()==='...'){
-        if(!inBlock){ inBlock=true; users=new Set(); }
-        users.add(user);
-        $('streak').textContent=`streak: ${users.size} users`;
-        if(users.size>=3){ log('Triggered by: '+Array.from(users).join(', ')); playCrickets(); resetStreak(); }
-      } else { if(inBlock) log('Streak broken'); resetStreak(); }
-    }
+        if (line.startsWith('PING')) {
+          send('PONG :tmi.twitch.tv');
+          return;
+        }
+        if (line.includes(' RECONNECT')) {
+          log('Server asked to RECONNECT');
+          try { ws.close(); } catch(_) {}
+          return;
+        }
+        // auth failures / bans come as NOTICE
+        if (line.includes(' NOTICE ') && /Login authentication failed|Error logging in/i.test(line)) {
+          sawAuthFailure = true;
+          log('Auth failed (Twitch said so). Anonymous might be blocked by something on your network.');
+          try { ws.close(); } catch(_) {}
+          return;
+        }
 
-    // WebSocket IRC (no libs)
-    let ws=null, reconnectTimer=null;
-    function send(line){ if(ws && ws.readyState===1){ ws.send(line+"\r\n"); } }
-    function connect(){
-      const channel = $('chan').value.trim().replace(/^#/, '').toLowerCase();
-      if(!channel) return;
-      resetStreak();
-      if(ws){ try{ ws.close(); }catch(_){} ws=null; }
-      $('status').textContent='connecting…';
-
-      const nick = 'justinfan' + Math.floor(Math.random()*1e6);
-      ws = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
-
-      ws.onopen = () => {
-        $('status').textContent='auth…';
-        send('PASS SCHMOOPIIE');
-        send('NICK ' + nick);
-        send('CAP REQ :twitch.tv/tags');
-        send('JOIN #' + channel);
-        $('status').textContent='connected'; $('status').classList.add('ok'); $('status').classList.remove('warn');
-        log('Connected as ' + nick + ' to #' + channel);
-      };
-
-      ws.onmessage = (ev) => {
-        const data = ev.data;
-        if(data.startsWith('PING')){ send('PONG :tmi.twitch.tv'); return; }
-        data.split('\r\n').forEach(line=>{
-          if(!line) return;
-          let withoutTags = line.startsWith('@') ? line.slice(line.indexOf(' ')+1) : line;
-          if(withoutTags.includes(' PRIVMSG ')){
-            const prefix = withoutTags.slice(1, withoutTags.indexOf(' '));
-            const msgStart = withoutTags.indexOf(' :');
-            const message = withoutTags.slice(msgStart+2);
-            let user = 'user';
-            const bang = prefix.indexOf('!');
-            if(bang>1) user = prefix.slice(0, bang).replace(/^:/,'');
-            if(line.startsWith('@')){
-              const tagStr = line.slice(1, line.indexOf(' '));
-              const m = /display-name=([^;]*)/.exec(tagStr);
-              if(m && m[1]) user = decodeURIComponent(m[1]);
-            }
-            onChat(user, message);
+        // Normal chat parsing
+        let withoutTags = line.startsWith('@') ? line.slice(line.indexOf(' ')+1) : line;
+        if (withoutTags.includes(' PRIVMSG ')) {
+          const prefix = withoutTags.slice(1, withoutTags.indexOf(' '));
+          const msgStart = withoutTags.indexOf(' :');
+          const message = withoutTags.slice(msgStart+2);
+          let user = 'user';
+          const bang = prefix.indexOf('!');
+          if (bang>1) user = prefix.slice(0, bang).replace(/^:/,'');
+          if (line.startsWith('@')) {
+            const tagStr = line.slice(1, line.indexOf(' '));
+            const m = /display-name=([^;]*)/.exec(tagStr);
+            if (m && m[1]) user = decodeURIComponent(m[1]);
           }
-        });
-      };
+          onChat(user, message);
+        }
+      });
+    };
 
-      ws.onerror = () => { $('status').textContent='error'; $('status').classList.add('warn'); log('WS error (network/adblock?)'); };
-      ws.onclose = () => { $('status').textContent='disconnected'; $('status').classList.add('warn'); log('Disconnected. Reconnecting in 5s…'); clearTimeout(reconnectTimer); reconnectTimer = setTimeout(connect, 5000); };
-    }
+    ws.onerror = () => {
+      document.getElementById('status').textContent = 'error';
+      document.getElementById('status').classList.add('warn');
+      log('WS error (extension/VPN/firewall can cause this).');
+    };
 
-    $('connect').onclick = connect;
-    if(location.protocol !== 'file:') setTimeout(connect, 400);
-  </script>
-</body>
-</html>
+    ws.onclose = () => {
+      document.getElementById('status').textContent = 'disconnected';
+      document.getElementById('status').classList.add('warn');
+      if (sawAuthFailure) { log('Not reconnecting due to auth failure.'); return; }
+      log(`Disconnected. Reconnecting in ${Math.round(backoff/1000)}s…`);
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(connect, backoff);
+      backoff = Math.min(backoff * 2, maxBackoff);
+    };
+  }
+
+  document.getElementById('connect').onclick = connect;
+  if (location.protocol !== 'file:') setTimeout(connect, 400);
+</script>
