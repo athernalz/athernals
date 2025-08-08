@@ -1,67 +1,61 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>yamatosdeath OBS</title></head>
+<head><meta charset="utf-8"><title>yamatosdeath – OBS</title></head>
 <body style="margin:0;background:transparent;">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tmi.js/1.8.5/tmi.min.js"></script>
 <script>
 const CLIENT_ID="n62lboxsur7ytj4lowidq6kdf8spuc";
 const hp=new URLSearchParams(location.hash.slice(1));
-const token=hp.get('token');
-let volumeLevel=parseFloat(localStorage.getItem('volumeLevel')||'0.65');
+const token=hp.get("token");
+let volumeLevel=parseFloat(localStorage.getItem("volumeLevel")||"0.65");
 
-async function getUsernameFromToken(tok){
-  const res=await fetch('https://api.twitch.tv/helix/users',{headers:{'Authorization':`Bearer ${tok}`,'Client-Id':CLIENT_ID}});
-  const j=await res.json(); return (j.data&&j.data[0]&&j.data[0].login)||null;
+async function getMe(tok){
+  const res=await fetch("https://api.twitch.tv/helix/users",{headers:{Authorization:`Bearer ${tok}`,"Client-Id":CLIENT_ID}});
+  const j=await res.json(); return j?.data?.[0]?.login?.toLowerCase()||null;
 }
 
 async function main(){
-  if(!token){ console.error('No token in URL hash'); return; }
-  const me=await getUsernameFromToken(token); // token owner (tester)
-  if(!me){ console.error('Token invalid/expired'); return; }
+  if(!token){ console.error("No token in URL."); return; }
+  const me = await getMe(token); if(!me){ console.error("Token invalid/expired"); return; }
 
   const client=new tmi.Client({
-    options:{debug:false}, connection:{reconnect:true,secure:true},
-    identity:{username:me, password:`oauth:${token}`},
-    channels:['yamatosdeath','athernals7']
+    options:{debug:false}, connection:{secure:true,reconnect:true},
+    identity:{username:me,password:`oauth:${token}`},
+    channels:["yamatosdeath","athernals7"]
   });
 
   let cooldown=false;
-  // yamatosdeath streak: 3 distinct users say "..." consecutively
-  let inBlock=false, users=new Set();
-
-  // athernals7 self-test: token owner can type "..." three times in a row
+  let ydBlock=false, ydUsers=new Set();
   let selfCount=0;
 
-  client.on('message', (ch, tags, msg)=>{
-    const m=msg.trim();
-    const user=(tags['username']||'').toLowerCase();
+  client.on("message",(ch,tags,message)=>{
+    const m=message.trim();
+    const user=(tags.username||"").toLowerCase();
 
-    if(ch==='#yamatosdeath'){
-      if(m==='...'){
-        if(!inBlock){ inBlock=true; users=new Set(); }
-        users.add(user);
-        if(users.size>=3 && !cooldown){ trigger(); resetY(); }
-      }else{ resetY(); }
+    if(ch==="#yamatosdeath"){
+      if(m==="..."){
+        if(!ydBlock){ ydBlock=true; ydUsers=new Set(); }
+        ydUsers.add(user);
+        if(ydUsers.size>=3 && !cooldown){ trigger(); ydBlock=false; ydUsers.clear(); }
+      }else{ ydBlock=false; ydUsers.clear(); }
     }
 
-    if(ch==='#athernals7'){
-      if(m==='...' && user===me.toLowerCase()){
+    if(ch==="#athernals7"){
+      if(m==="..." && user===me){
         selfCount++;
         if(selfCount>=3 && !cooldown){ trigger(); selfCount=0; }
-      }else if(m!=='...'){ selfCount=0; }
+      }else if(m!=="..."){ selfCount=0; }
     }
   });
 
-  function resetY(){ inBlock=false; users.clear(); }
-
   function trigger(){
-    const s=new Audio('./crickets.mp3');
+    const s=new Audio("./crickets.mp3");
     s.volume=volumeLevel;
-    s.play().catch(e=>console.error('Audio error',e));
+    s.play().catch(e=>console.error("Audio error:",e));
     cooldown=true; setTimeout(()=>cooldown=false,10000);
   }
 
-  client.connect().catch(e=>console.error('tmi connect error',e));
+  client.connect().catch(e=>console.error("tmi connect error",e));
 }
 main();
 </script>
