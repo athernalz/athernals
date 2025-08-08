@@ -2,57 +2,34 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Yamato Crickets</title>
+  <title>Crickets on “...” ×3</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- tmi.js (Twitch chat) -->
-  <script src="https://cdn.jsdelivr.net/npm/tmi.js@1.8.5/dist/tmi.min.js"></script>
   <style>
-    :root { --bg:#0f172a; --card:#111827; --muted:#94a3b8; --accent:#22c55e; --bad:#ef4444; --chip:#1f2937; }
-    * { box-sizing: border-box; }
-    body {
-      margin:0; min-height:100vh; display:grid; place-items:center;
-      background: radial-gradient(1200px 600px at 80% -10%, #1f2937 0, #0b1020 40%, #070b18 70%, #030510 100%);
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-      color: #e5e7eb;
-    }
-    .card {
-      width: min(720px, 92vw);
-      background: linear-gradient(180deg, #0b1224, #0a0f1f);
-      border: 1px solid #1f2a44;
-      border-radius: 16px; padding: 20px;
-      box-shadow: 0 10px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04);
-    }
-    h1 { margin: 0 0 8px; font-size: 22px; letter-spacing: .2px; }
-    p.sub { margin:0 0 16px; color: var(--muted); font-size: 13px; }
-    .row { display:flex; gap:10px; flex-wrap: wrap; align-items:center; margin: 10px 0 6px; }
-    input[type="text"] {
-      background:#0e152b; color:#e5e7eb; border:1px solid #203057; padding:10px 12px; border-radius:10px; outline:none;
-    }
-    button {
-      border:1px solid #203057; background:#0e152b; color:#e5e7eb;
-      padding:10px 14px; border-radius:10px; cursor:pointer; transition:.15s;
-    }
-    button:hover { transform: translateY(-1px); }
-    button.primary { background:#123264; border-color:#2456a8; }
-    .chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
-    .chip {
-      background:#0e152b; border:1px solid #203057; color:#cbd5e1;
-      padding:6px 10px; border-radius:999px; font-size:12px;
-    }
-    .ok { border-color:#1f8a4d; color:#86efac; }
-    .warn { border-color:#a62d2d; color:#fca5a5; }
-    .log { margin-top:12px; font-size:12px; color:#9ca3af; max-height:120px; overflow:auto; }
-    .muted { color:#94a3b8; }
-    .divider { height:1px; background:#162244; margin:12px 0; }
+    :root { --bg:#0f172a; --card:#111827; --muted:#94a3b8; --ok:#22c55e; --warn:#ef4444; --edge:#1f2a44; }
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b1020;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#e5e7eb}
+    .card{width:min(720px,92vw);background:linear-gradient(180deg,#0b1224,#0a0f1f);border:1px solid var(--edge);border-radius:16px;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.04)}
+    h1{margin:0 0 8px;font-size:22px}
+    p.sub{margin:0 0 16px;color:var(--muted);font-size:13px}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0 6px}
+    input[type=text]{background:#0e152b;color:#e5e7eb;border:1px solid #203057;padding:10px 12px;border-radius:10px;outline:none}
+    button{border:1px solid #203057;background:#0e152b;color:#e5e7eb;padding:10px 14px;border-radius:10px;cursor:pointer;transition:.15s}
+    button:hover{transform:translateY(-1px)}
+    button.primary{background:#123264;border-color:#2456a8}
+    .chip{background:#0e152b;border:1px solid #203057;color:#cbd5e1;padding:6px 10px;border-radius:999px;font-size:12px}
+    .ok{border-color:#1f8a4d;color:#86efac}
+    .warn{border-color:#a62d2d;color:#fca5a5}
+    .divider{height:1px;background:#162244;margin:12px 0}
+    .log{margin-top:12px;font-size:12px;color:#9ca3af;max-height:140px;overflow:auto}
   </style>
 </head>
 <body>
   <div class="card">
     <h1>Crickets on “...” ×3</h1>
-    <p class="sub">Plays a sound when three different people type <b>...</b> consecutively in chat.</p>
+    <p class="sub">Plays a sound when three different people type <b>...</b> consecutively in chat. No login needed.</p>
 
     <div class="row">
-      <label class="muted">Channel</label>
+      <label class="sub">Channel</label>
       <input id="chan" type="text" value="yamatosdeath" />
       <button id="connect" class="primary">Connect</button>
       <span id="status" class="chip">disconnected</span>
@@ -66,8 +43,6 @@
     </div>
 
     <div class="divider"></div>
-    <div id="note" class="muted" style="font-size:12px">Tip: host on GitHub Pages (HTTPS). No Twitch login needed to read chat.</div>
-
     <div id="log" class="log" aria-live="polite"></div>
   </div>
 
@@ -76,75 +51,112 @@
   </audio>
 
   <script>
-    // --- tiny helpers ---
     const $ = id => document.getElementById(id);
-    const log = msg => { const t=new Date().toLocaleTimeString(); $('log').innerHTML += `[${t}] ${msg}<br>`; $('log').scrollTop = $('log').scrollHeight; };
+    const log = m => { const t=new Date().toLocaleTimeString(); $('log').innerHTML += `[${t}] ${m}<br>`; $('log').scrollTop=$('log').scrollHeight; };
 
-    // --- audio (needs user gesture once) ---
-    const audio = $('crickets');
-    let soundEnabled = false;
-    $('enable').onclick = async () => {
-      try { await audio.play().catch(()=>{}); audio.pause(); soundEnabled = true; $('sound').textContent = 'sound: enabled'; $('sound').classList.add('ok'); log('Sound enabled'); }
-      catch(e){ log('Audio blocked: ' + e.message); }
-    };
+    // --- Sound ---
+    const audio = $('crickets'); let soundEnabled=false;
+    $('enable').onclick = async () => { try{ await audio.play().catch(()=>{}); audio.pause(); soundEnabled=true; $('sound').textContent='sound: enabled'; $('sound').classList.add('ok'); log('Sound enabled'); }catch(e){ log('Audio blocked: '+e.message);} };
 
-    // --- cooldown ---
-    let onCooldown = false;
-    const COOLDOWN_MS = 5000;
-    async function playCrickets() {
-      if (onCooldown || !soundEnabled) return;
-      onCooldown = true;
-      $('cool').textContent = 'cooldown: active';
-      try { await audio.play(); } catch(e){ log('Play failed: ' + e.message); }
-      setTimeout(()=>{ onCooldown = false; $('cool').textContent = 'cooldown: ready'; }, COOLDOWN_MS);
-    }
+    // --- Cooldown ---
+    let onCooldown=false; const COOLDOWN=5000;
+    async function playCrickets(){ if(onCooldown||!soundEnabled) return; onCooldown=true; $('cool').textContent='cooldown: active'; try{ await audio.play(); }catch(e){ log('Play failed: '+e.message);} setTimeout(()=>{ onCooldown=false; $('cool').textContent='cooldown: ready'; }, COOLDOWN); }
 
-    // --- streak: 3 distinct users posting "..." with no other messages between ---
-    let inBlock = false;
-    let users = new Set();
-    function resetStreak(){ inBlock = false; users.clear(); $('streak').textContent = 'streak: 0 users'; }
-    function onMessage(user, msg) {
-      if ((msg || '').trim() === '...') {
-        if (!inBlock) { inBlock = true; users = new Set(); }
+    // --- Streak logic ("..." by 3 distinct users in a row) ---
+    let inBlock=false; let users=new Set();
+    function resetStreak(){ inBlock=false; users.clear(); $('streak').textContent='streak: 0 users'; }
+    function onChat(user, msg){
+      if((msg||'').trim()==='...'){
+        if(!inBlock){ inBlock=true; users=new Set(); }
         users.add(user);
-        $('streak').textContent = `streak: ${users.size} users`;
-        if (users.size >= 3) { log('Triggered by: ' + Array.from(users).join(', ')); playCrickets(); resetStreak(); }
-      } else {
-        if (inBlock) log('Streak broken');
-        resetStreak();
-      }
+        $('streak').textContent=`streak: ${users.size} users`;
+        if(users.size>=3){ log('Triggered by: '+Array.from(users).join(', ')); playCrickets(); resetStreak(); }
+      } else { if(inBlock) log('Streak broken'); resetStreak(); }
     }
 
-    // --- connect to Twitch chat anonymously (no login needed) ---
-    let client = null;
-    function connect() {
+    // --- Minimal Twitch IRC client (no libs) ---
+    let ws=null, reconnectTimer=null;
+    function send(line){ if(ws && ws.readyState===1){ ws.send(line+"\r\n"); } }
+    function connect(){
       const channel = $('chan').value.trim().replace(/^#/, '').toLowerCase();
-      if (!channel) return;
-      if (!window.tmi) { log('tmi.js failed to load (adblock/network?).'); $('status').textContent = 'error'; $('status').classList.add('warn'); return; }
+      if(!channel) return;
+      resetStreak();
+      if(ws){ try{ ws.close(); }catch(_){} ws=null; }
+      $('status').textContent='connecting…';
 
-      if (client) { try { client.disconnect(); } catch(_){} }
+      const nick = 'justinfan' + Math.floor(Math.random()*1e6); // anonymous
+      ws = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
 
-      client = new tmi.Client({
-        connection: { secure: true, reconnect: true },
-        channels: [channel] // anonymous read-only
-      });
+      ws.onopen = () => {
+        $('status').textContent='auth…';
+        // PASS is required but any string works for anonymous; Twitch ignores it for justinfan
+        send('PASS SCHMOOPIIE');
+        send('NICK ' + nick);
+        // request tags so we can get display-name; not strictly required
+        send('CAP REQ :twitch.tv/tags');
+        send('JOIN #' + channel);
+        $('status').textContent='connected'; $('status').classList.add('ok'); $('status').classList.remove('warn');
+        log('Connected as ' + nick + ' to #' + channel);
+      };
 
-      $('status').textContent = 'connecting…';
-      client.on('connected', ()=> { $('status').textContent = 'connected'; $('status').classList.remove('warn'); $('status').classList.add('ok'); log('Connected to #' + channel); });
-      client.on('disconnected', r=> { $('status').textContent = 'disconnected'; $('status').classList.remove('ok'); $('status').classList.add('warn'); log('Disconnected: ' + r); });
-      client.on('message', (_ch, userstate, message, self)=> {
-        if (self) return;
-        const u = userstate['display-name'] || userstate['username'] || userstate['login'] || 'user';
-        onMessage(u, message);
-      });
+      ws.onmessage = (ev) => {
+        const data = ev.data;
+        // Handle PING :tmi.twitch.tv
+        if(data.startsWith('PING')){
+          send('PONG :tmi.twitch.tv');
+          return;
+        }
 
-      client.connect().catch(err => { $('status').textContent='error'; $('status').classList.add('warn'); log('Connect error: ' + (err?.message || err)); });
+        // There can be multiple IRC lines in one frame; split
+        data.split('\r\n').forEach(line=>{
+          if(!line) return;
+
+          // Example (with tags):
+          // @badge-info=;badges=;...;display-name=User;... :user!user@user.tmi.twitch.tv PRIVMSG #channel :message here
+          // Strip tags for easier parsing
+          let withoutTags = line.startsWith('@') ? line.slice(line.indexOf(' ')+1) : line;
+
+          if(withoutTags.includes(' PRIVMSG ')){
+            const prefixEnd = withoutTags.indexOf(' ');
+            const prefix = withoutTags.slice(1, prefixEnd); // :user!user@...
+            const afterPrefix = withoutTags.slice(prefixEnd+1);
+            const msgStart = afterPrefix.indexOf(' :');
+            const params = afterPrefix.slice(0, msgStart).split(' ');
+            const message = afterPrefix.slice(msgStart+2);
+
+            // username from prefix
+            let user = 'user';
+            const bang = prefix.indexOf('!');
+            if(bang>1) user = prefix.slice(1, bang);
+
+            // try to upgrade with display-name from tags (if present)
+            if(line.startsWith('@')){
+              const tagStr = line.slice(1, line.indexOf(' '));
+              const m = /display-name=([^;]*)/.exec(tagStr);
+              if(m && m[1]) user = decodeURIComponent(m[1]);
+            }
+
+            onChat(user, message);
+          }
+        });
+      };
+
+      ws.onerror = (e) => {
+        $('status').textContent='error'; $('status').classList.add('warn'); log('WS error (network/adblock?): check extensions/VPN.');
+      };
+
+      ws.onclose = () => {
+        $('status').textContent='disconnected'; $('status').classList.add('warn');
+        log('Disconnected. Reconnecting in 5s…');
+        clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(connect, 5000);
+      };
     }
 
     $('connect').onclick = connect;
 
-    // Auto-connect if not opened via file:// (helpful on GitHub Pages)
-    if (location.protocol !== 'file:') setTimeout(connect, 300);
+    // Auto-connect on Pages (https), not on file://
+    if(location.protocol !== 'file:') setTimeout(connect, 400);
   </script>
 </body>
 </html>
