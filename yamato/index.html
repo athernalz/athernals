@@ -1,61 +1,167 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8">
-<title>yamatosdeath OBS Setup</title>
+<meta charset="utf-8" />
+<title>yamatosdeath – Control</title>
 <style>
-  body{font-family:Arial, sans-serif;background:#0e0e10;color:#fff;display:flex;justify-content:center;padding:20px}
-  .container{background:#18181b;border-radius:12px;padding:20px;max-width:560px;width:100%;box-shadow:0 0 20px rgba(0,0,0,.5);text-align:center}
-  h1{font-size:1.4rem;margin:0 0 10px}
+  body{font-family:Arial, sans-serif;background:#0e0e10;color:#fff;display:flex;justify-content:center;padding:24px}
+  .card{background:#18181b;border-radius:14px;padding:20px;max-width:640px;width:100%;box-shadow:0 0 24px rgba(0,0,0,.45);text-align:center}
+  h1{margin:0 0 10px;font-size:20px}
+  .row{display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap}
   button{border:none;padding:12px 18px;border-radius:10px;font-size:16px;cursor:pointer;background:#9147ff;color:#fff}
   button:hover{background:#772ce8}
-  #obsLinkBox{margin-top:16px;background:#000;padding:12px;border-radius:8px;font-family:monospace;font-size:13px;word-break:break-all;display:none}
-  .row{display:flex;gap:8px;justify-content:center;align-items:center;margin-top:10px}
-  .chip{background:#222;padding:4px 8px;border-radius:999px;font-size:12px}
+  .chip{background:#222;padding:6px 10px;border-radius:999px;font-size:12px}
+  #obsBox{display:none;margin-top:14px;background:#000;padding:12px;border-radius:8px;font-family:monospace;font-size:13px;word-break:break-all}
+  .copy{padding:8px 12px;border-radius:8px;background:#3b82f6}
+  .copy:hover{background:#2563eb}
+  .vol{display:flex;gap:10px;justify-content:center;align-items:center;margin-top:10px}
+  #log{margin-top:12px;background:#000;padding:10px;border-radius:8px;font-size:12px;text-align:left;max-height:180px;overflow:auto}
 </style>
 </head>
 <body>
-<div class="container">
-  <h1>OBS Link for yamatosdeath</h1>
-  <p id="hint" class="chip">Login once → copy your OBS link.</p>
-  <div class="row"><button id="loginBtn">Login with Twitch</button></div>
-  <div id="obsLinkBox"></div>
+<div class="card">
+  <h1>Crickets Trigger (local + OBS)</h1>
+
+  <div id="loginRow" class="row">
+    <button id="loginBtn">Login with Twitch</button>
+    <span id="hint" class="chip">Log in once to generate your OBS link.</span>
+  </div>
+
+  <div id="obsBox"></div>
+
+  <div id="controls" style="display:none;margin-top:6px">
+    <div class="row"><span id="status" class="chip">connecting…</span></div>
+    <div class="vol">
+      <label for="vol">Volume</label>
+      <input id="vol" type="range" min="0" max="1" step="0.01">
+      <span id="volv" class="chip"></span>
+    </div>
+  </div>
+
+  <div id="log"></div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tmi.js/1.8.5/tmi.min.js"></script>
 <script>
-const CLIENT_ID="n62lboxsur7ytj4lowidq6kdf8spuc";
-const REDIRECT_URI="https://www.athernals.com/yamato/";
-const SCOPE="chat:read";
+const CLIENT_ID = "n62lboxsur7ytj4lowidq6kdf8spuc";
+const REDIRECT_URI = "https://www.athernals.com/yamato/";
+const SCOPE = "chat:read";
+const CHANNELS = ["yamatosdeath","athernals7"];
 
-function showLink(token){
-  const obsUrl=`${location.origin}/yamato/obs.html#token=${token}`;
-  const box=document.getElementById('obsLinkBox');
-  box.style.display='block';
-  box.innerHTML = `
-    <div><b>Your OBS Link</b></div>
-    <div>${obsUrl}</div>
-    <div class="row">
-      <button id="copyBtn">Copy link</button>
-      <span class="chip">Works ~60 days</span>
-    </div>`;
-  document.getElementById('copyBtn').onclick=()=>navigator.clipboard.writeText(obsUrl);
-  document.getElementById('hint').textContent='Paste this into an OBS Browser Source.';
-}
+const $ = id => document.getElementById(id);
+const log = m => { const t=new Date().toLocaleTimeString(); $("log").innerHTML += `[${t}] ${m}<br>`; $("log").scrollTop = $("log").scrollHeight; };
 
-document.getElementById('loginBtn').onclick=()=>{
-  const url=`https://id.twitch.tv/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=${SCOPE}`;
-  location.href=url;
+let token = null;
+let me = null;           // token owner's username (lowercase)
+let client = null;
+let cooldown = false;
+
+// volume (persist)
+let volume = parseFloat(localStorage.getItem("volumeLevel") || "0.65");
+$("vol").value = volume; $("volv").textContent = Math.round(volume*100) + "%";
+$("vol").oninput = e => { volume = parseFloat(e.target.value); localStorage.setItem("volumeLevel", String(volume)); $("volv").textContent = Math.round(volume*100) + "%"; };
+
+// Login
+$("loginBtn").onclick = () => {
+  const url = `https://id.twitch.tv/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=${SCOPE}`;
+  location.href = url;
 };
 
-// handle new login
-if(location.hash.includes('access_token=')){
-  const token=new URLSearchParams(location.hash.slice(1)).get('access_token');
-  localStorage.setItem('tw_token',token);
-  history.replaceState({},'',location.pathname); // clean hash
-  showLink(token);
-}else{
-  const saved=localStorage.getItem('tw_token');
-  if(saved){ showLink(saved); } // already logged in → don’t nag
+// After OAuth
+if (location.hash.includes("access_token=")) {
+  token = new URLSearchParams(location.hash.slice(1)).get("access_token");
+  localStorage.setItem("tw_token", token);
+  history.replaceState({}, "", location.pathname); // clean URL
+}
+if (!token) token = localStorage.getItem("tw_token");
+
+// UI: hide login if we have a token
+if (token) {
+  $("loginRow").style.display = "none";
+  $("controls").style.display = "block";
+  showObsLink(token);
+  start();
+} else {
+  $("loginRow").style.display = "flex";
+  $("controls").style.display = "none";
+  $("obsBox").style.display = "none";
+  log("Please log in with Twitch to start.");
+}
+
+function showObsLink(tok){
+  const obsUrl = `${location.origin}/yamato/obs.html#token=${tok}`;
+  $("obsBox").style.display = "block";
+  $("obsBox").innerHTML = `
+    <div><b>Your OBS Browser Source URL</b></div>
+    <div>${obsUrl}</div>
+    <div class="row"><button class="copy" id="copyBtn">Copy link</button><span class="chip">Works ~60 days</span></div>`;
+  $("copyBtn").onclick = () => navigator.clipboard.writeText(obsUrl);
+}
+
+async function getMe(){
+  const res = await fetch("https://api.twitch.tv/helix/users", {
+    headers: { "Authorization": `Bearer ${token}`, "Client-Id": CLIENT_ID }
+  });
+  const data = await res.json();
+  return data?.data?.[0]?.login?.toLowerCase() || null;
+}
+
+async function start(){
+  $("status").textContent = "connecting…";
+  me = await getMe();
+  if (!me) { log("Auth failed or expired. Please log in again."); localStorage.removeItem("tw_token"); $("loginRow").style.display="flex"; $("controls").style.display="none"; return; }
+
+  client = new tmi.Client({
+    options: { debug: false },
+    connection: { secure: true, reconnect: true },
+    identity: { username: me, password: `oauth:${token}` },
+    channels: CHANNELS
+  });
+
+  // yamatosdeath: 3 distinct users "..." in a row
+  let ydBlock = false, ydUsers = new Set();
+
+  // athernals7: token owner can type "..." three times in a row to test
+  let testCount = 0;
+
+  client.on("connected", () => { $("status").textContent = "connected"; log("Connected to chat."); });
+  client.on("disconnected", () => { $("status").textContent = "disconnected"; log("Disconnected."); });
+
+  client.on("message", (ch, tags, message) => {
+    const msg = message.trim();
+    const user = (tags["username"] || "").toLowerCase();
+
+    if (ch === "#yamatosdeath") {
+      if (msg === "...") {
+        if (!ydBlock){ ydBlock = true; ydUsers = new Set(); }
+        ydUsers.add(user);
+        if (ydUsers.size >= 3 && !cooldown) { triggerBoth(); ydBlock=false; ydUsers.clear(); }
+      } else { ydBlock=false; ydUsers.clear(); }
+    }
+
+    if (ch === "#athernals7") {
+      if (msg === "..." && user === me) {
+        testCount++;
+        if (testCount >= 3 && !cooldown) { triggerBoth(); testCount = 0; }
+      } else if (msg !== "...") {
+        testCount = 0;
+      }
+    }
+  });
+
+  client.connect().catch(e => { $("status").textContent = "error"; log("Connect error: " + e); });
+}
+
+// Play locally + let OBS play via its own obs.html
+function triggerBoth(){
+  // local play
+  const s = new Audio("./crickets.mp3");
+  s.volume = volume;
+  s.play().catch(e => log("Audio error: " + e));
+
+  // cooldown (10s)
+  cooldown = true;
+  setTimeout(()=> cooldown = false, 10000);
 }
 </script>
 </body>
