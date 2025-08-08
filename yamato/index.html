@@ -189,15 +189,29 @@ document.getElementById("volume").oninput = (e) => {
     document.getElementById("volumeLabel").innerText = Math.round(volumeLevel * 100) + "%";
 };
 
-// After OAuth redirect
+// Handle OAuth redirect
 if (window.location.hash) {
     const hashParams = new URLSearchParams(window.location.hash.substr(1));
     token = hashParams.get("access_token");
     if (token) {
+        localStorage.setItem("twitch_token", token);
         document.getElementById("loginSection").style.display = "none";
         document.getElementById("mainSection").style.display = "block";
         logMsg("Access token acquired.");
         connectChat();
+    }
+} else {
+    // If we already have a saved token, reuse it
+    const savedToken = localStorage.getItem("twitch_token");
+    if (savedToken) {
+        token = savedToken;
+        document.getElementById("loginSection").style.display = "none";
+        document.getElementById("mainSection").style.display = "block";
+        logMsg("Using saved login.");
+        connectChat();
+    } else {
+        // No token → ask user to log in
+        logMsg("Please log in with Twitch to start.");
     }
 }
 </script>
