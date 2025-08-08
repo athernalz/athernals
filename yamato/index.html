@@ -5,40 +5,83 @@
 <title>yamatosdeath</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-body { background:#0b1020; color:#fff; font-family:sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; margin:0 }
-button { padding:14px 20px; font-size:16px; border:none; border-radius:8px; cursor:pointer; background:#9146FF; color:#fff; font-weight:bold }
-button:hover { background:#772ce8 }
-.row { margin:10px; }
-.chip { background:#222; padding:4px 8px; border-radius:8px; font-size:12px; margin-left:6px }
+    body {
+        background: #0b1020;
+        color: #fff;
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        text-align: center;
+    }
+    button {
+        padding: 12px 20px;
+        font-size: 16px;
+        border: none;
+        border-radius: 25px;
+        cursor: pointer;
+        background: #9146FF;
+        color: #fff;
+        font-weight: bold;
+        margin: 5px;
+        transition: background 0.2s;
+    }
+    button:hover {
+        background: #772ce8;
+    }
+    .chip {
+        display: inline-block;
+        background: #222;
+        padding: 6px 10px;
+        border-radius: 15px;
+        font-size: 12px;
+        margin: 5px;
+    }
+    input[type="range"] {
+        width: 200px;
+        margin-top: 10px;
+    }
+    #log {
+        margin-top: 20px;
+        font-size: 12px;
+        max-height: 200px;
+        overflow-y: auto;
+        background: #111;
+        padding: 10px;
+        text-align: left;
+        border-radius: 10px;
+        width: 90%;
+        margin-left: auto;
+        margin-right: auto;
+    }
 </style>
 </head>
 <body>
 
 <div id="login-screen">
-  <h1>Login with Twitch to start</h1>
-  <button id="login-btn">Login with Twitch</button>
+    <h1>Login with Twitch</h1>
+    <button id="login-btn">Login with Twitch</button>
 </div>
 
 <div id="app" style="display:none;">
-  <div class="row">
-    <button id="connect-btn">Connect</button>
-    <button id="enable-sound">Enable Sound</button>
-    <span id="status" class="chip">disconnected</span>
-  </div>
-  <div class="row">
-    Volume: <input id="volume" type="range" min="0" max="100" value="80">
-    <span id="volval" class="chip">80%</span>
-  </div>
-  <audio id="crickets" preload="auto">
-    <source src="./crickets.mp3" type="audio/mpeg">
-  </audio>
-  <div id="log" style="margin-top:20px; font-size:12px; max-height:200px; overflow:auto; background:#111; padding:10px; width:90%;"></div>
+    <div>
+        <button id="connect-btn">Connect</button>
+        <button id="enable-sound">Enable Sound</button>
+        <span id="status" class="chip">disconnected</span>
+    </div>
+    <div>
+        Volume: <input id="volume" type="range" min="0" max="100" value="80">
+        <span id="volval" class="chip">80%</span>
+    </div>
+    <audio id="crickets" preload="auto">
+        <source src="./crickets.mp3" type="audio/mpeg">
+    </audio>
+    <div id="log"></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tmi.js@1.8.5/dist/tmi.min.js"></script>
 <script>
 const CLIENT_ID = "n62lboxsur7ytj4lowidq6kdf8spuc";
-const REDIRECT_URI = "https://www.athernals.com/yamato/"; // must match exactly in Twitch Dev Console
+const REDIRECT_URI = "https://www.athernals.com/yamato/";
 const CHANNEL = "yamatosdeath";
 
 // Helpers
@@ -46,65 +89,98 @@ const $ = id => document.getElementById(id);
 const log = m => { const t=new Date().toLocaleTimeString(); $('log').innerHTML += `[${t}] ${m}<br>`; $('log').scrollTop=$('log').scrollHeight; };
 
 // Volume control
-const audio = $('crickets'); let soundEnabled=false;
+const audio = $('crickets'); 
+audio.volume = 0.8;
+let soundEnabled=false;
 $('volume').oninput = e => { audio.volume = e.target.value/100; $('volval').textContent = e.target.value+"%"; };
 
 // Enable sound
-$('enable-sound').onclick = async () => { try{ await audio.play(); audio.pause(); soundEnabled=true; log("Sound enabled"); }catch(e){ log("Sound blocked: "+e.message);} };
+$('enable-sound').onclick = async () => { 
+    try { 
+        await audio.play(); 
+        audio.pause(); 
+        soundEnabled=true; 
+        log("Sound enabled"); 
+    } catch(e) { 
+        log("Sound blocked: "+e.message);
+    }
+};
 
 // OAuth token handling
 function getTokenFromHash() {
-  if (location.hash && location.hash.includes('access_token=')) {
-    const match = location.hash.match(/access_token=([^&]*)/);
-    if (match) {
-      const token = match[1];
-      localStorage.setItem('twitch_token', token);
-      location.hash = ''; // clean URL
-      return token;
+    if (location.hash && location.hash.includes('access_token=')) {
+        const match = location.hash.match(/access_token=([^&]*)/);
+        if (match) {
+            const token = match[1];
+            localStorage.setItem('twitch_token', token);
+            location.hash = ''; 
+            return token;
+        }
     }
-  }
-  return localStorage.getItem('twitch_token');
+    return localStorage.getItem('twitch_token');
 }
 
 function startLogin() {
-  const authUrl = `https://id.twitch.tv/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=chat:read`;
-  window.location = authUrl;
+    const authUrl = `https://id.twitch.tv/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=chat:read`;
+    window.location = authUrl;
 }
 
 // Chat connection
 function connectChat(token) {
-  const client = new tmi.Client({
-    options: { debug: true },
-    connection: { reconnect: true, secure: true },
-    identity: { username: "", password: "oauth:"+token },
-    channels: [ CHANNEL ]
-  });
+    if (!token) { log("No token found. Please login."); return; }
 
-  let inBlock=false, users=new Set();
-  function resetStreak(){ inBlock=false; users.clear(); $('streak') && ($('streak').textContent='streak: 0'); }
-  async function playCrickets(){ if(!soundEnabled) return; try{ await audio.play(); }catch(e){ log('Play failed: '+e.message); } }
+    const client = new tmi.Client({
+        options: { debug: true },
+        connection: { reconnect: true, secure: true },
+        identity: { username: "", password: "oauth:"+token },
+        channels: [ CHANNEL ]
+    });
 
-  client.connect().then(() => { $('status').textContent="connected"; log("Connected to chat"); });
+    let streakUsers = new Set();
+    let cooldown = false;
 
-  client.on('message', (channel, tags, message, self) => {
-    if (message.trim() === "...") {
-      if (!inBlock) { inBlock = true; users = new Set(); }
-      users.add(tags['display-name'] || tags.username);
-      if (users.size >= 3) { log("Triggered!"); playCrickets(); resetStreak(); }
-    } else {
-      if (inBlock) { log("Streak broken"); resetStreak(); }
+    function resetStreak() { streakUsers.clear(); }
+    async function playCrickets() { 
+        if (!soundEnabled || cooldown) return;
+        try { 
+            await audio.play(); 
+            cooldown = true;
+            setTimeout(()=>{ cooldown = false; }, 5000);
+        } catch(e) { log('Play failed: '+e.message); }
     }
-  });
+
+    client.connect().then(() => { 
+        $('status').textContent="connected"; 
+        log("Connected to chat"); 
+    });
+
+    client.on('message', (channel, tags, message, self) => {
+        if (message.trim() === "...") {
+            streakUsers.add(tags['display-name'] || tags.username);
+            if (streakUsers.size >= 3) {
+                log("Triggered crickets!");
+                playCrickets();
+                resetStreak();
+            }
+        } else {
+            if (streakUsers.size > 0) { log("Streak broken"); resetStreak(); }
+        }
+    });
+
+    client.on('disconnected', () => {
+        $('status').textContent = "disconnected";
+        log("Disconnected from chat");
+    });
 }
 
 // Main flow
 const token = getTokenFromHash();
 if (!token) {
-  $('login-btn').onclick = startLogin;
+    $('login-btn').onclick = startLogin;
 } else {
-  $('login-screen').style.display='none';
-  $('app').style.display='block';
-  $('connect-btn').onclick = () => connectChat(token);
+    $('login-screen').style.display='none';
+    $('app').style.display='block';
+    $('connect-btn').onclick = () => connectChat(token);
 }
 </script>
 </body>
