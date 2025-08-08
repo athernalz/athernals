@@ -2,154 +2,149 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Crickets on triple-ellipsis</title>
+  <title>Yamato Crickets</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <script src="https://unpkg.com/tmi.js@1.8.5/dist/tmi.min.js"></script>
+  <!-- tmi.js (Twitch chat) -->
+  <script src="https://cdn.jsdelivr.net/npm/tmi.js@1.8.5/dist/tmi.min.js"></script>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 20px; }
-    .row { margin: 8px 0; display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
-    .badge { display:inline-block; padding:2px 8px; border-radius:999px; background:#eee; }
-    button { padding:8px 12px; border-radius:8px; border:1px solid #ccc; cursor:pointer; }
-    #log { max-height: 280px; overflow:auto; border:1px solid #eee; padding:8px; margin-top:8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px;}
-    .warn { background:#fff7d6; border:1px solid #ffda6a; padding:8px; border-radius:8px;}
+    :root { --bg:#0f172a; --card:#111827; --muted:#94a3b8; --accent:#22c55e; --bad:#ef4444; --chip:#1f2937; }
+    * { box-sizing: border-box; }
+    body {
+      margin:0; min-height:100vh; display:grid; place-items:center;
+      background: radial-gradient(1200px 600px at 80% -10%, #1f2937 0, #0b1020 40%, #070b18 70%, #030510 100%);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      color: #e5e7eb;
+    }
+    .card {
+      width: min(720px, 92vw);
+      background: linear-gradient(180deg, #0b1224, #0a0f1f);
+      border: 1px solid #1f2a44;
+      border-radius: 16px; padding: 20px;
+      box-shadow: 0 10px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    h1 { margin: 0 0 8px; font-size: 22px; letter-spacing: .2px; }
+    p.sub { margin:0 0 16px; color: var(--muted); font-size: 13px; }
+    .row { display:flex; gap:10px; flex-wrap: wrap; align-items:center; margin: 10px 0 6px; }
+    input[type="text"] {
+      background:#0e152b; color:#e5e7eb; border:1px solid #203057; padding:10px 12px; border-radius:10px; outline:none;
+    }
+    button {
+      border:1px solid #203057; background:#0e152b; color:#e5e7eb;
+      padding:10px 14px; border-radius:10px; cursor:pointer; transition:.15s;
+    }
+    button:hover { transform: translateY(-1px); }
+    button.primary { background:#123264; border-color:#2456a8; }
+    .chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+    .chip {
+      background:#0e152b; border:1px solid #203057; color:#cbd5e1;
+      padding:6px 10px; border-radius:999px; font-size:12px;
+    }
+    .ok { border-color:#1f8a4d; color:#86efac; }
+    .warn { border-color:#a62d2d; color:#fca5a5; }
+    .log { margin-top:12px; font-size:12px; color:#9ca3af; max-height:120px; overflow:auto; }
+    .muted { color:#94a3b8; }
+    .divider { height:1px; background:#162244; margin:12px 0; }
   </style>
 </head>
 <body>
-  <h1>Crickets on "..." x3 (distinct users)</h1>
+  <div class="card">
+    <h1>Crickets on “...” ×3</h1>
+    <p class="sub">Plays a sound when three different people type <b>...</b> consecutively in chat.</p>
 
-  <div id="fileWarn" class="warn" style="display:none">
-    ⚠️ You opened this page via <b>file://</b>. Many browsers block WebSocket auth here.
-    Please run a tiny server (e.g. <code>python -m http.server 8080</code>) and open the
-    <b>http://</b> URL instead.
+    <div class="row">
+      <label class="muted">Channel</label>
+      <input id="chan" type="text" value="yamatosdeath" />
+      <button id="connect" class="primary">Connect</button>
+      <span id="status" class="chip">disconnected</span>
+    </div>
+
+    <div class="row">
+      <button id="enable">Enable sound</button>
+      <span id="sound" class="chip">sound: blocked</span>
+      <span id="streak" class="chip">streak: 0 users</span>
+      <span id="cool" class="chip">cooldown: ready</span>
+    </div>
+
+    <div class="divider"></div>
+    <div id="note" class="muted" style="font-size:12px">Tip: host on GitHub Pages (HTTPS). No Twitch login needed to read chat.</div>
+
+    <div id="log" class="log" aria-live="polite"></div>
   </div>
-
-  <div class="row">
-    <label>Channel:
-      <input id="chan" value="yamatosdeath" />
-    </label>
-    <button id="connectBtn">Connect</button>
-    <span id="conn" class="badge">disconnected</span>
-  </div>
-
-  <div class="row">
-    <button id="enableSound">Enable sound</button>
-    <span id="soundStatus" class="badge">sound: blocked</span>
-    <span id="streak" class="badge">streak: 0 users</span>
-    <span id="cooldown" class="badge">cooldown: ready</span>
-  </div>
-
-  <div id="log" aria-live="polite"></div>
 
   <audio id="crickets" preload="auto">
-    <source src="crickets.sfx">
-    <source src="crickets.mp3" type="audio/mpeg">
-    <source src="crickets.wav" type="audio/wav">
+    <source src="./crickets.mp3" type="audio/mpeg">
   </audio>
 
   <script>
-    // --- file:// warning ---
-    if (location.protocol === 'file:') {
-      document.getElementById('fileWarn').style.display = 'block';
-    }
+    // --- tiny helpers ---
+    const $ = id => document.getElementById(id);
+    const log = msg => { const t=new Date().toLocaleTimeString(); $('log').innerHTML += `[${t}] ${msg}<br>`; $('log').scrollTop = $('log').scrollHeight; };
 
-    const $ = (id) => document.getElementById(id);
-    const status = {
-      conn: $('conn'),
-      streak: $('streak'),
-      cooldown: $('cooldown'),
-      soundStatus: $('soundStatus'),
-      log: $('log'),
-      chan: $('chan'),
-      connectBtn: $('connectBtn')
-    };
-    function log(line) {
-      const ts = new Date().toLocaleTimeString();
-      const p = document.createElement('div');
-      p.textContent = `[${ts}] ${line}`;
-      status.log.appendChild(p);
-      status.log.scrollTop = status.log.scrollHeight;
-      console.log(line);
-    }
-
-    // --- Sound priming ---
+    // --- audio (needs user gesture once) ---
     const audio = $('crickets');
     let soundEnabled = false;
-    $('enableSound').addEventListener('click', async () => {
-      try { await audio.play().catch(() => {}); audio.pause(); soundEnabled = true;
-        status.soundStatus.textContent = 'sound: enabled'; log('✅ Sound enabled');
-      } catch (e) { log('⚠️ Could not enable sound: ' + e.message); }
-    });
+    $('enable').onclick = async () => {
+      try { await audio.play().catch(()=>{}); audio.pause(); soundEnabled = true; $('sound').textContent = 'sound: enabled'; $('sound').classList.add('ok'); log('Sound enabled'); }
+      catch(e){ log('Audio blocked: ' + e.message); }
+    };
 
-    // --- Cooldown ---
+    // --- cooldown ---
     let onCooldown = false;
     const COOLDOWN_MS = 5000;
-    async function triggerCrickets() {
+    async function playCrickets() {
       if (onCooldown || !soundEnabled) return;
       onCooldown = true;
-      status.cooldown.textContent = 'cooldown: active';
-      try { await audio.play(); } catch (e) { log('⚠️ Audio play blocked: ' + e.message); }
-      setTimeout(() => { onCooldown = false; status.cooldown.textContent = 'cooldown: ready'; }, COOLDOWN_MS);
+      $('cool').textContent = 'cooldown: active';
+      try { await audio.play(); } catch(e){ log('Play failed: ' + e.message); }
+      setTimeout(()=>{ onCooldown = false; $('cool').textContent = 'cooldown: ready'; }, COOLDOWN_MS);
     }
 
-    // --- Ellipsis streak tracking ---
-    let lastWasEllipsis = false;
-    let ellipsisUsers = new Set();
-    function resetStreak() { lastWasEllipsis = false; ellipsisUsers.clear(); status.streak.textContent = 'streak: 0 users'; }
-    function handleMessage(username, message) {
-      const msg = (message || '').trim();
-      if (msg === '...') {
-        if (!lastWasEllipsis) { ellipsisUsers = new Set(); lastWasEllipsis = true; }
-        if (!ellipsisUsers.has(username)) { ellipsisUsers.add(username); }
-        status.streak.textContent = `streak: ${ellipsisUsers.size} user${ellipsisUsers.size===1?'':'s'}`;
-        if (ellipsisUsers.size >= 3) { log(`🎯 Triggered by: ${Array.from(ellipsisUsers).join(', ')}`); triggerCrickets(); resetStreak(); }
+    // --- streak: 3 distinct users posting "..." with no other messages between ---
+    let inBlock = false;
+    let users = new Set();
+    function resetStreak(){ inBlock = false; users.clear(); $('streak').textContent = 'streak: 0 users'; }
+    function onMessage(user, msg) {
+      if ((msg || '').trim() === '...') {
+        if (!inBlock) { inBlock = true; users = new Set(); }
+        users.add(user);
+        $('streak').textContent = `streak: ${users.size} users`;
+        if (users.size >= 3) { log('Triggered by: ' + Array.from(users).join(', ')); playCrickets(); resetStreak(); }
       } else {
-        if (lastWasEllipsis) log('— streak broken —');
+        if (inBlock) log('Streak broken');
         resetStreak();
       }
     }
 
-    // --- Twitch connect / diagnostics ---
+    // --- connect to Twitch chat anonymously (no login needed) ---
     let client = null;
-    function destroyClient() {
-      if (client) { try { client.removeAllListeners(); client.disconnect(); } catch(_){} client = null; }
-    }
-
     function connect() {
-      destroyClient();
-      const channel = status.chan.value.trim().replace(/^#/, '').toLowerCase();
-      if (!channel) { alert('Enter a channel'); return; }
+      const channel = $('chan').value.trim().replace(/^#/, '').toLowerCase();
+      if (!channel) return;
+      if (!window.tmi) { log('tmi.js failed to load (adblock/network?).'); $('status').textContent = 'error'; $('status').classList.add('warn'); return; }
 
-      // options.debug gives verbose console logs from tmi.js
+      if (client) { try { client.disconnect(); } catch(_){} }
+
       client = new tmi.Client({
-        options: { debug: true },
         connection: { secure: true, reconnect: true },
         channels: [channel] // anonymous read-only
       });
 
-      client.on('connecting', (addr, port) => { status.conn.textContent = 'connecting'; log(`Connecting to ${addr}:${port} (secure)`); });
-      client.on('logon', () => log('Logon (anonymous)'));
-      client.on('connected', (_addr, _port) => { status.conn.textContent = 'connected'; log(`✅ Connected to #${channel}`); });
-      client.on('reconnect', () => { status.conn.textContent = 'reconnecting'; log('Reconnecting…'); });
-      client.on('disconnected', (reason) => { status.conn.textContent = 'disconnected'; log('❌ Disconnected: ' + reason); });
-
-      client.on('notice', (_ch, msgid, msg) => log(`NOTICE [${msgid}]: ${msg}`));
-      client.on('message', (ch, userstate, message, self) => {
+      $('status').textContent = 'connecting…';
+      client.on('connected', ()=> { $('status').textContent = 'connected'; $('status').classList.remove('warn'); $('status').classList.add('ok'); log('Connected to #' + channel); });
+      client.on('disconnected', r=> { $('status').textContent = 'disconnected'; $('status').classList.remove('ok'); $('status').classList.add('warn'); log('Disconnected: ' + r); });
+      client.on('message', (_ch, userstate, message, self)=> {
         if (self) return;
-        const user = userstate['display-name'] || userstate['username'] || userstate['login'] || 'someone';
-        handleMessage(user, message);
+        const u = userstate['display-name'] || userstate['username'] || userstate['login'] || 'user';
+        onMessage(u, message);
       });
 
-      client.connect().catch(err => {
-        status.conn.textContent = 'disconnected';
-        log('❌ Connect error: ' + (err?.message || err));
-        if (location.protocol === 'file:') log('Hint: serve over http:// instead of file://');
-      });
+      client.connect().catch(err => { $('status').textContent='error'; $('status').classList.add('warn'); log('Connect error: ' + (err?.message || err)); });
     }
 
-    status.connectBtn.addEventListener('click', connect);
+    $('connect').onclick = connect;
 
-    // Auto-connect once if not file:// (you can still hit Connect again)
-    if (location.protocol !== 'file:') connect();
+    // Auto-connect if not opened via file:// (helpful on GitHub Pages)
+    if (location.protocol !== 'file:') setTimeout(connect, 300);
   </script>
 </body>
 </html>
