@@ -21,7 +21,7 @@
   .vol{display:flex;gap:10px;justify-content:center;align-items:center;margin-top:10px}
   #log{margin-top:12px;background:#000;padding:10px;border-radius:8px;font-size:12px;text-align:left;max-height:220px;overflow:auto}
   .hr{height:1px;background:#2a2a2e;margin:14px 0}
-  a.small{font-size:12px;color:#93c5fd;text-decoration:underline;cursor:pointer}
+  .ver{position:fixed;left:10px;bottom:8px;color:#9ca3af;font-size:12px;opacity:.7;user-select:none}
 </style>
 </head>
 <body>
@@ -40,7 +40,7 @@
     <div class="row">
       <span id="status" class="chip">connecting…</span>
       <button id="logoutBtn" class="logout">Log out</button>
-      <a id="reloadLink" class="small">Reload (cache-bust)</a>
+      <a id="reloadLink" style="cursor:pointer" class="chip">Reload (cache-bust)</a>
     </div>
     <div class="vol">
       <label for="vol">Volume</label>
@@ -52,11 +52,15 @@
   <div id="log"></div>
 </div>
 
+<div class="ver">v0.0.7</div>
+
 <script>
 const CLIENT_ID = "n62lboxsur7ytj4lowidq6kdf8spuc";
 const REDIRECT_URI = "https://www.athernals.com/yamato/";
 const SCOPE = "chat:read";
 const CHANNELS = ["yamatosdeath","athernals7"];
+const urlParams = new URLSearchParams(location.search);
+const forceLib = urlParams.get("lib"); // "local" | "cdn" | null
 
 const $ = id => document.getElementById(id);
 const log = (m, cls="") => {
@@ -68,7 +72,7 @@ const log = (m, cls="") => {
   $("log").scrollTop = $("log").scrollHeight;
 };
 
-// volume (persist)
+// persist volume
 let volume = parseFloat(localStorage.getItem("volumeLevel") || "0.65");
 $("vol").value = volume;
 $("volv").textContent = Math.round(volume*100) + "%";
@@ -78,22 +82,15 @@ $("vol").oninput = e => {
   $("volv").textContent = Math.round(volume*100) + "%";
 };
 
-// Cache-bust reload
+// actions
 $("reloadLink").onclick = () => location.href = location.pathname + "?v=" + Date.now();
-
-// Logout
-$("logoutBtn").onclick = () => {
-  localStorage.removeItem("tw_token");
-  location.href = location.pathname + "?logged_out=" + Date.now();
-};
-
-// OAuth start
+$("logoutBtn").onclick = () => { localStorage.removeItem("tw_token"); location.href = location.pathname + "?logged_out=" + Date.now(); };
 $("loginBtn").onclick = () => {
-  const url = `https://id.twitch.tv/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=${SCOPE}`;
-  location.href = url;
+  const u = `https://id.twitch.tv/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=${SCOPE}`;
+  location.href = u;
 };
 
-// Build OBS link
+// build OBS link
 function showObsLink(tok){
   const obsUrl = `${location.origin}/yamato/obs.html#token=${tok}`;
   $("obsBox").style.display = "block";
@@ -104,49 +101,56 @@ function showObsLink(tok){
   $("copyBtn").onclick = () => navigator.clipboard.writeText(obsUrl);
 }
 
-// Load chat library (local first, CDN fallback)
+// dynamic loader: local first, CDN fallback (or forced)
 function loadChatLib(){
-  return new Promise((resolve, reject) => {
-    const tryLoad = (src, onFail) => {
+  return new Promise((resolve, reject)=>{
+    const v = "v=" + Date.now();
+    const tryLoad = (src, next) => {
       const s = document.createElement("script");
-      s.src = src;
-      s.onload = () => window.tmi ? resolve() : onFail();
-      s.onerror = onFail;
+      s.src = src + (src.includes("?") ? "&" : "?") + v;
+      s.onload = () => window.tmi ? resolve() : next();
+      s.onerror = next;
       document.body.appendChild(s);
     };
-    const v = "v=" + Date.now();
-    tryLoad("./chatlib.min.js?"+v, () => {
-      // fallback to CDN if local blocked
-      tryLoad("https://cdnjs.cloudflare.com/ajax/libs/tmi.js/1.8.5/tmi.min.js?"+v, () => {
-        reject(new Error("Failed to load chat library (local & CDN)."));
+
+    if (forceLib === "cdn") {
+      tryLoad("https://cdnjs.cloudflare.com/ajax/libs/tmi.js/1.8.5/tmi.min.js", ()=>reject(new Error("CDN blocked")));
+      return;
+    }
+    if (forceLib === "local") {
+      tryLoad("./chatlib.min.js", ()=>reject(new Error("Local lib blocked/missing")));
+      return;
+    }
+
+    // default: local then cdn
+    tryLoad("./chatlib.min.js", ()=> {
+      tryLoad("https://cdnjs.cloudflare.com/ajax/libs/tmi.js/1.8.5/tmi.min.js", ()=> {
+        reject(new Error("Local & CDN chat library blocked"));
       });
     });
   });
 }
 
-// Safe Twitch fetch
+// twitch fetch
 async function twitchJSON(path, token){
   const res = await fetch(`https://api.twitch.tv/helix/${path}`, {
     headers: { "Authorization": `Bearer ${token}`, "Client-Id": CLIENT_ID }
   });
-  if (!res.ok) {
-    const text = await res.text().catch(()=>res.statusText);
-    throw new Error(`HTTP ${res.status} ${res.statusText}: ${text}`);
-  }
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
   return res.json();
 }
 
-// Token flow
+// token retrieval
 let token = null;
 if (location.hash.includes("access_token=")) {
   token = new URLSearchParams(location.hash.slice(1)).get("access_token");
   localStorage.setItem("tw_token", token);
-  history.replaceState({}, "", location.pathname); // clean URL
+  history.replaceState({}, "", location.pathname + location.search); // clean hash
 } else {
   token = localStorage.getItem("tw_token");
 }
 
-// Main
+// main
 (async function init(){
   if (!token) {
     $("loginRow").style.display = "flex";
@@ -164,7 +168,7 @@ if (location.hash.includes("access_token=")) {
     await loadChatLib();
   } catch (e) {
     $("status").textContent = "error";
-    log("Chat library blocked/failed to load. Try disabling extensions or use the Reload (cache-bust) link.", "warn");
+    log("Chat library failed to load. Try '?lib=cdn' or disable extensions.", "warn");
     log(e.message, "warn");
     return;
   }
@@ -177,19 +181,18 @@ if (location.hash.includes("access_token=")) {
     if (!me) throw new Error("No user in token");
   } catch (e) {
     $("status").textContent = "auth failed";
-    log("Token validation error: " + e.message, "warn");
+    log("Token invalid/expired. Please log in again.", "warn");
     localStorage.removeItem("tw_token");
     $("loginRow").style.display = "flex";
     $("controls").style.display = "none";
     $("obsBox").style.display = "none";
-    $("hint").textContent = "Please log in with Twitch to start.";
     return;
   }
 
   showObsLink(token);
   $("status").textContent = "connecting…";
 
-  // Connect chat now that tmi is guaranteed to exist
+  // connect with window.tmi to avoid global ref issues
   const client = new window.tmi.Client({
     options: { debug: false },
     connection: { secure: true, reconnect: true },
@@ -201,37 +204,36 @@ if (location.hash.includes("access_token=")) {
   let ydBlock=false, ydUsers=new Set();
   let selfCount=0;
 
-  client.on("connected", () => { $("status").textContent = "connected"; log("Connected to chat as " + me + "."); });
-  client.on("reconnect", () => { $("status").textContent = "reconnecting…"; log("Reconnecting…"); });
-  client.on("disconnected", (reason) => { $("status").textContent = "disconnected"; log("Disconnected: " + (reason||"unknown"), "warn"); });
+  client.on("connected", ()=>{ $("status").textContent = "connected"; log("Connected as " + me + "."); });
+  client.on("reconnect", ()=>{ $("status").textContent = "reconnecting…"; log("Reconnecting…"); });
+  client.on("disconnected", r=>{ $("status").textContent = "disconnected"; log("Disconnected: " + (r||"unknown"), "warn"); });
 
-  client.on("message", (ch, tags, msg) => {
-    const m = msg.trim();
-    const user = (tags.username || "").toLowerCase();
+  client.on("message",(ch,tags,msg)=>{
+    const m=msg.trim();
+    const user=(tags.username||"").toLowerCase();
 
-    if (ch === "#yamatosdeath") {
-      if (m === "...") {
-        if (!ydBlock){ ydBlock = true; ydUsers = new Set(); }
+    if(ch==="#yamatosdeath"){
+      if(m==="..."){
+        if(!ydBlock){ ydBlock=true; ydUsers=new Set(); }
         ydUsers.add(user);
-        if (ydUsers.size >= 3 && !cooldown) { triggerLocal(); ydBlock=false; ydUsers.clear(); }
+        if(ydUsers.size>=3 && !cooldown){ triggerLocal(); ydBlock=false; ydUsers.clear(); }
       } else { ydBlock=false; ydUsers.clear(); }
     }
-
-    if (ch === "#athernals7") {
-      if (m === "..." && user === me) {
+    if(ch==="#athernals7"){
+      if(m==="..." && user===me){
         selfCount++;
-        if (selfCount >= 3 && !cooldown) { triggerLocal(); selfCount = 0; }
-      } else if (m !== "...") { selfCount = 0; }
+        if(selfCount>=3 && !cooldown){ triggerLocal(); selfCount=0; }
+      } else if(m!=="..."){ selfCount=0; }
     }
   });
 
-  client.connect().catch(e => { $("status").textContent = "error"; log("Connect error: " + (e?.message || e), "warn"); });
+  client.connect().catch(e=>{ $("status").textContent="error"; log("Connect error: "+(e?.message||e), "warn"); });
 
   function triggerLocal(){
     const s = new Audio("./crickets.mp3");
     s.volume = volume;
-    s.play().catch(e => log("Audio error: " + e, "warn"));
-    cooldown = true; setTimeout(()=>cooldown=false, 10000);
+    s.play().catch(e=>log("Audio error: "+e, "warn"));
+    cooldown=true; setTimeout(()=>cooldown=false,10000);
   }
 })();
 </script>
