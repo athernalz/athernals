@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Twitch Cricket Sound</title>
+    <!-- Changed website title -->
+    <title>YamatosDeath</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Changed this line to use your local file -->
     <script src="chatlib.min.js"></script>
@@ -14,9 +15,14 @@
         }
     </style>
 </head>
-<body class="bg-gray-900 text-white flex items-center justify-center h-screen">
+<body class="bg-gray-900 text-white flex items-center justify-center h-screen relative">
+    <!-- Added version tracker -->
+    <div class="absolute bottom-4 left-4 text-xs text-gray-500">
+        v0.0.1
+    </div>
+
     <div class="text-center p-8 bg-gray-800 rounded-lg shadow-xl">
-        <h1 class="text-4xl font-bold mb-4">Cricket Sound Alert 🦗</h1>
+        <!-- Removed the H1 title -->
         <p class="text-lg text-gray-400 mb-2">Listening to channel: <span class="font-mono text-green-400">yamatosdeath</span></p>
         <div id="status" class="text-2xl font-semibold p-4 rounded-md bg-gray-700">
             Waiting for messages...
@@ -57,6 +63,8 @@
             // Trim whitespace from the message
             const trimmedMessage = message.trim();
 
+            // This logic counts any consecutive "..." messages, regardless of the user.
+            // If any other message appears, the count resets.
             if (trimmedMessage === triggerMessage) {
                 // If the message is "...", increment the counter
                 consecutiveCount++;
