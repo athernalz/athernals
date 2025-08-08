@@ -1,80 +1,86 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
 <head>
 <meta charset="utf-8">
 <title>yamatosdeath</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
     body {
-        background: #0b1020;
-        color: #fff;
         font-family: Arial, sans-serif;
-        margin: 0;
+        background-color: #0e0e10;
+        color: white;
+        display: flex;
+        justify-content: center;
         padding: 20px;
-        text-align: center;
+    }
+    .container {
+        background: #18181b;
+        border-radius: 12px;
+        padding: 20px;
+        max-width: 500px;
+        width: 100%;
+        box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    }
+    h1 {
+        font-size: 1.4rem;
+        margin-bottom: 10px;
     }
     button {
-        padding: 12px 20px;
-        font-size: 16px;
+        background-color: #9147ff;
+        color: white;
         border: none;
-        border-radius: 25px;
+        padding: 10px 18px;
+        border-radius: 8px;
+        font-size: 14px;
         cursor: pointer;
-        background: #9146FF;
-        color: #fff;
-        font-weight: bold;
-        margin: 5px;
+        margin: 4px;
         transition: background 0.2s;
     }
     button:hover {
-        background: #772ce8;
+        background-color: #772ce8;
     }
-    .chip {
+    button:disabled {
+        background-color: #333;
+        cursor: not-allowed;
+    }
+    .status-chip {
         display: inline-block;
-        background: #222;
-        padding: 6px 10px;
-        border-radius: 15px;
+        padding: 4px 8px;
+        border-radius: 6px;
+        background: #333;
         font-size: 12px;
-        margin: 5px;
+        margin: 4px 2px;
     }
-    input[type="range"] {
-        width: 200px;
+    .slider-container {
+        display: flex;
+        align-items: center;
         margin-top: 10px;
     }
+    .slider-container input {
+        flex: 1;
+    }
     #log {
-        margin-top: 20px;
+        margin-top: 10px;
+        background: black;
+        padding: 8px;
         font-size: 12px;
-        max-height: 200px;
+        height: 150px;
         overflow-y: auto;
-        background: #111;
-        padding: 10px;
-        text-align: left;
-        border-radius: 10px;
-        width: 90%;
-        margin-left: auto;
-        margin-right: auto;
+        border-radius: 6px;
     }
 </style>
 </head>
 <body>
-
-<div id="login-screen">
-    <h1>Login with Twitch</h1>
-    <button id="login-btn">Login with Twitch</button>
-</div>
-
-<div id="app" style="display:none;">
-    <div>
-        <button id="connect-btn">Connect</button>
-        <button id="enable-sound">Enable Sound</button>
-        <span id="status" class="chip">disconnected</span>
+<div class="container">
+    <h1>yamatosdeath</h1>
+    <button id="loginBtn">Login with Twitch</button>
+    <button id="connectBtn" disabled>Connect</button>
+    <button id="soundBtn">Enable Sound</button>
+    <span class="status-chip" id="connStatus">disconnected</span>
+    <div class="slider-container">
+        <label for="volume">Volume:</label>
+        <input type="range" id="volume" min="0" max="1" step="0.01" value="0.4">
+        <span id="volumeLabel">40%</span>
     </div>
-    <div>
-        Volume: <input id="volume" type="range" min="0" max="100" value="80">
-        <span id="volval" class="chip">80%</span>
-    </div>
-    <audio id="crickets" preload="auto">
-        <source src="./crickets.mp3" type="audio/mpeg">
-    </audio>
     <div id="log"></div>
 </div>
 
@@ -82,105 +88,96 @@
 <script>
 const CLIENT_ID = "n62lboxsur7ytj4lowidq6kdf8spuc";
 const REDIRECT_URI = "https://www.athernals.com/yamato/";
-const CHANNEL = "yamatosdeath";
+const SCOPE = "chat:read";
+let token = null;
+let username = null;
+let client = null;
+let soundEnabled = false;
+let streakUsers = new Set();
+let cooldown = false;
 
-// Helpers
-const $ = id => document.getElementById(id);
-const log = m => { const t=new Date().toLocaleTimeString(); $('log').innerHTML += `[${t}] ${m}<br>`; $('log').scrollTop=$('log').scrollHeight; };
+const audio = new Audio("./crickets.mp3");
+audio.volume = 0.4;
 
-// Volume control
-const audio = $('crickets'); 
-audio.volume = 0.8;
-let soundEnabled=false;
-$('volume').oninput = e => { audio.volume = e.target.value/100; $('volval').textContent = e.target.value+"%"; };
+function logMsg(msg) {
+    const logBox = document.getElementById("log");
+    const now = new Date().toLocaleTimeString();
+    logBox.innerHTML += `[${now}] ${msg}<br>`;
+    logBox.scrollTop = logBox.scrollHeight;
+}
 
-// Enable sound
-$('enable-sound').onclick = async () => { 
-    try { 
-        await audio.play(); 
-        audio.pause(); 
-        soundEnabled=true; 
-        log("Sound enabled"); 
-    } catch(e) { 
-        log("Sound blocked: "+e.message);
-    }
+document.getElementById("loginBtn").onclick = () => {
+    const url = `https://id.twitch.tv/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=${SCOPE}`;
+    window.location = url;
 };
 
-// OAuth token handling
-function getTokenFromHash() {
-    if (location.hash && location.hash.includes('access_token=')) {
-        const match = location.hash.match(/access_token=([^&]*)/);
-        if (match) {
-            const token = match[1];
-            localStorage.setItem('twitch_token', token);
-            location.hash = ''; 
-            return token;
+async function getUsernameFromToken(token) {
+    const res = await fetch("https://api.twitch.tv/helix/users", {
+        headers: {
+            "Authorization": `Bearer ${token}`,
+            "Client-Id": CLIENT_ID
         }
+    });
+    const data = await res.json();
+    return data.data[0].login;
+}
+
+document.getElementById("connectBtn").onclick = async () => {
+    if (!token) {
+        logMsg("No token found, please login.");
+        return;
     }
-    return localStorage.getItem('twitch_token');
-}
-
-function startLogin() {
-    const authUrl = `https://id.twitch.tv/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=chat:read`;
-    window.location = authUrl;
-}
-
-// Chat connection
-function connectChat(token) {
-    if (!token) { log("No token found. Please login."); return; }
-
-    const client = new tmi.Client({
+    username = await getUsernameFromToken(token);
+    logMsg(`Connecting as ${username}...`);
+    client = new tmi.Client({
         options: { debug: true },
-        connection: { reconnect: true, secure: true },
-        identity: { username: "", password: "oauth:"+token },
-        channels: [ CHANNEL ]
+        identity: {
+            username: username,
+            password: `oauth:${token}`
+        },
+        channels: ["yamatosdeath"]
     });
 
-    let streakUsers = new Set();
-    let cooldown = false;
+    client.connect().then(() => {
+        document.getElementById("connStatus").innerText = "connected";
+        logMsg("Connected to chat.");
+    }).catch(err => logMsg(`Connection error: ${err}`));
 
-    function resetStreak() { streakUsers.clear(); }
-    async function playCrickets() { 
-        if (!soundEnabled || cooldown) return;
-        try { 
-            await audio.play(); 
-            cooldown = true;
-            setTimeout(()=>{ cooldown = false; }, 5000);
-        } catch(e) { log('Play failed: '+e.message); }
-    }
-
-    client.connect().then(() => { 
-        $('status').textContent="connected"; 
-        log("Connected to chat"); 
-    });
-
-    client.on('message', (channel, tags, message, self) => {
+    client.on("message", (channel, tags, message) => {
         if (message.trim() === "...") {
-            streakUsers.add(tags['display-name'] || tags.username);
-            if (streakUsers.size >= 3) {
-                log("Triggered crickets!");
-                playCrickets();
-                resetStreak();
+            streakUsers.add(tags.username);
+            if (streakUsers.size >= 3 && !cooldown && soundEnabled) {
+                audio.play();
+                logMsg("Crickets triggered!");
+                cooldown = true;
+                setTimeout(() => cooldown = false, 5000);
+                streakUsers.clear();
             }
         } else {
-            if (streakUsers.size > 0) { log("Streak broken"); resetStreak(); }
+            streakUsers.clear();
         }
     });
+};
 
-    client.on('disconnected', () => {
-        $('status').textContent = "disconnected";
-        log("Disconnected from chat");
-    });
-}
+document.getElementById("soundBtn").onclick = () => {
+    soundEnabled = !soundEnabled;
+    document.getElementById("soundBtn").innerText = soundEnabled ? "Sound Enabled" : "Enable Sound";
+    logMsg(`Sound ${soundEnabled ? "enabled" : "disabled"}`);
+};
 
-// Main flow
-const token = getTokenFromHash();
-if (!token) {
-    $('login-btn').onclick = startLogin;
-} else {
-    $('login-screen').style.display='none';
-    $('app').style.display='block';
-    $('connect-btn').onclick = () => connectChat(token);
+document.getElementById("volume").oninput = (e) => {
+    audio.volume = parseFloat(e.target.value);
+    document.getElementById("volumeLabel").innerText = Math.round(audio.volume * 100) + "%";
+};
+
+// Parse token from hash fragment after redirect
+if (window.location.hash) {
+    const hashParams = new URLSearchParams(window.location.hash.substr(1));
+    token = hashParams.get("access_token");
+    if (token) {
+        logMsg("Access token acquired.");
+        document.getElementById("connectBtn").disabled = false;
+    }
 }
 </script>
 </body>
