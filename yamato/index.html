@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Twitch Cricket Sound</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/tmi.js/dist/tmi.min.js"></script>
+    <!-- Changed this line to use your local file -->
+    <script src="chatlib.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         body {
@@ -40,6 +41,7 @@
         }
 
         // Create a new TMI client
+        // This should now work because chatlib.min.js defines the "tmi" object
         const client = new tmi.Client({
             channels: [channelName]
         });
