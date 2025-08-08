@@ -1,102 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>yamatosdeath</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body { background:#0b1020; color:#fff; font-family:sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; margin:0 }
+button { padding:14px 20px; font-size:16px; border:none; border-radius:8px; cursor:pointer; background:#9146FF; color:#fff; font-weight:bold }
+button:hover { background:#772ce8 }
+.row { margin:10px; }
+.chip { background:#222; padding:4px 8px; border-radius:8px; font-size:12px; margin-left:6px }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <h1>Login with Twitch to start</h1>
+  <button id="login-btn">Login with Twitch</button>
+</div>
+
+<div id="app" style="display:none;">
+  <div class="row">
+    <button id="connect-btn">Connect</button>
+    <button id="enable-sound">Enable Sound</button>
+    <span id="status" class="chip">disconnected</span>
+  </div>
+  <div class="row">
+    Volume: <input id="volume" type="range" min="0" max="100" value="80">
+    <span id="volval" class="chip">80%</span>
+  </div>
+  <audio id="crickets" preload="auto">
+    <source src="./crickets.mp3" type="audio/mpeg">
+  </audio>
+  <div id="log" style="margin-top:20px; font-size:12px; max-height:200px; overflow:auto; background:#111; padding:10px; width:90%;"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/tmi.js@1.8.5/dist/tmi.min.js"></script>
 <script>
-  let ws = null, reconnectTimer = null, backoff = 5000, maxBackoff = 60000;
-  let sawAuthFailure = false;
+const CLIENT_ID = "YOUR_CLIENT_ID";
+const REDIRECT_URI = "YOUR_REDIRECT_URI"; // must match exactly in Twitch Dev Console
+const CHANNEL = "yamatosdeath";
 
-  function send(line){ if(ws && ws.readyState===1){ ws.send(line + "\r\n"); } }
+// Helpers
+const $ = id => document.getElementById(id);
+const log = m => { const t=new Date().toLocaleTimeString(); $('log').innerHTML += `[${t}] ${m}<br>`; $('log').scrollTop=$('log').scrollHeight; };
 
-  function connect() {
-    const channel = document.getElementById('chan').value.trim().replace(/^#/, '').toLowerCase();
-    if (!channel) return;
-    clearTimeout(reconnectTimer);
-    if (ws) { try { ws.close(); } catch(_){} ws = null; }
+// Volume control
+const audio = $('crickets'); let soundEnabled=false;
+$('volume').oninput = e => { audio.volume = e.target.value/100; $('volval').textContent = e.target.value+"%"; };
 
-    sawAuthFailure = false;
-    document.getElementById('status').textContent = 'connecting…';
+// Enable sound
+$('enable-sound').onclick = async () => { try{ await audio.play(); audio.pause(); soundEnabled=true; log("Sound enabled"); }catch(e){ log("Sound blocked: "+e.message);} };
 
-    const nick = 'justinfan' + Math.floor(Math.random()*1e6);
-    ws = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
-
-    ws.onopen = () => {
-      document.getElementById('status').textContent = 'auth…';
-      // PASS can be any string for justinfan; Twitch ignores it
-      send('PASS SCHMOOPIIE');
-      send('NICK ' + nick);
-      // Optional USER (not required by Twitch, but some proxies like it)
-      send('USER ' + nick + ' 8 * :' + nick);
-      // Ask for tags so we can read display-name
-      send('CAP REQ :twitch.tv/tags twitch.tv/commands');
-
-      // Small delay before JOIN; avoids immediate drops on some edges
-      setTimeout(() => {
-        send('JOIN #' + channel);
-        document.getElementById('status').textContent = 'connected';
-        document.getElementById('status').classList.add('ok');
-        document.getElementById('status').classList.remove('warn');
-        log('Connected as ' + nick + ' to #' + channel);
-        backoff = 5000; // reset backoff on success
-      }, 750);
-    };
-
-    ws.onmessage = (ev) => {
-      // Log raw lines to see reasons coming from Twitch
-      ev.data.split('\r\n').forEach(line => {
-        if (!line) return;
-        // Show control lines
-        if (!line.includes('PRIVMSG')) log('IRC: ' + line);
-
-        if (line.startsWith('PING')) {
-          send('PONG :tmi.twitch.tv');
-          return;
-        }
-        if (line.includes(' RECONNECT')) {
-          log('Server asked to RECONNECT');
-          try { ws.close(); } catch(_) {}
-          return;
-        }
-        // auth failures / bans come as NOTICE
-        if (line.includes(' NOTICE ') && /Login authentication failed|Error logging in/i.test(line)) {
-          sawAuthFailure = true;
-          log('Auth failed (Twitch said so). Anonymous might be blocked by something on your network.');
-          try { ws.close(); } catch(_) {}
-          return;
-        }
-
-        // Normal chat parsing
-        let withoutTags = line.startsWith('@') ? line.slice(line.indexOf(' ')+1) : line;
-        if (withoutTags.includes(' PRIVMSG ')) {
-          const prefix = withoutTags.slice(1, withoutTags.indexOf(' '));
-          const msgStart = withoutTags.indexOf(' :');
-          const message = withoutTags.slice(msgStart+2);
-          let user = 'user';
-          const bang = prefix.indexOf('!');
-          if (bang>1) user = prefix.slice(0, bang).replace(/^:/,'');
-          if (line.startsWith('@')) {
-            const tagStr = line.slice(1, line.indexOf(' '));
-            const m = /display-name=([^;]*)/.exec(tagStr);
-            if (m && m[1]) user = decodeURIComponent(m[1]);
-          }
-          onChat(user, message);
-        }
-      });
-    };
-
-    ws.onerror = () => {
-      document.getElementById('status').textContent = 'error';
-      document.getElementById('status').classList.add('warn');
-      log('WS error (extension/VPN/firewall can cause this).');
-    };
-
-    ws.onclose = () => {
-      document.getElementById('status').textContent = 'disconnected';
-      document.getElementById('status').classList.add('warn');
-      if (sawAuthFailure) { log('Not reconnecting due to auth failure.'); return; }
-      log(`Disconnected. Reconnecting in ${Math.round(backoff/1000)}s…`);
-      clearTimeout(reconnectTimer);
-      reconnectTimer = setTimeout(connect, backoff);
-      backoff = Math.min(backoff * 2, maxBackoff);
-    };
+// OAuth token handling
+function getTokenFromHash() {
+  if (location.hash && location.hash.includes('access_token=')) {
+    const match = location.hash.match(/access_token=([^&]*)/);
+    if (match) {
+      const token = match[1];
+      localStorage.setItem('twitch_token', token);
+      location.hash = ''; // clean URL
+      return token;
+    }
   }
+  return localStorage.getItem('twitch_token');
+}
 
-  document.getElementById('connect').onclick = connect;
-  if (location.protocol !== 'file:') setTimeout(connect, 400);
+function startLogin() {
+  const authUrl = `https://id.twitch.tv/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=chat:read`;
+  window.location = authUrl;
+}
+
+// Chat connection
+function connectChat(token) {
+  const client = new tmi.Client({
+    options: { debug: true },
+    connection: { reconnect: true, secure: true },
+    identity: { username: "", password: "oauth:"+token },
+    channels: [ CHANNEL ]
+  });
+
+  let inBlock=false, users=new Set();
+  function resetStreak(){ inBlock=false; users.clear(); $('streak') && ($('streak').textContent='streak: 0'); }
+  async function playCrickets(){ if(!soundEnabled) return; try{ await audio.play(); }catch(e){ log('Play failed: '+e.message); } }
+
+  client.connect().then(() => { $('status').textContent="connected"; log("Connected to chat"); });
+
+  client.on('message', (channel, tags, message, self) => {
+    if (message.trim() === "...") {
+      if (!inBlock) { inBlock = true; users = new Set(); }
+      users.add(tags['display-name'] || tags.username);
+      if (users.size >= 3) { log("Triggered!"); playCrickets(); resetStreak(); }
+    } else {
+      if (inBlock) { log("Streak broken"); resetStreak(); }
+    }
+  });
+}
+
+// Main flow
+const token = getTokenFromHash();
+if (!token) {
+  $('login-btn').onclick = startLogin;
+} else {
+  $('login-screen').style.display='none';
+  $('app').style.display='block';
+  $('connect-btn').onclick = () => connectChat(token);
+}
 </script>
+</body>
+</html>
