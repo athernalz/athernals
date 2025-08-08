@@ -16,7 +16,7 @@
 <body class="bg-gray-900 text-white flex items-center justify-center h-screen relative">
     <!-- Updated version tracker -->
     <div class="absolute bottom-4 left-4 text-xs text-gray-500">
-        v0.0.2
+        v0.0.3
     </div>
 
     <div class="text-center p-8 bg-gray-800 rounded-lg shadow-xl">
@@ -24,6 +24,7 @@
         <div id="status" class="text-2xl font-semibold p-4 rounded-md bg-gray-700">
             Waiting for messages...
         </div>
+        <!-- The audio tag is no longer used for playback control, only for holding the source -->
         <audio id="cricketSound" src="crickets.mp3" preload="auto"></audio>
     </div>
 
@@ -35,12 +36,28 @@
         // ---------------------
 
         const statusElement = document.getElementById('status');
-        const cricketSound = document.getElementById('cricketSound');
         let consecutiveCount = 0;
 
         // Function to update the status display
         function updateStatus() {
             statusElement.textContent = `Consecutive "..." count: ${consecutiveCount} / ${triggerCount}`;
+        }
+
+        // --- NEW AUDIO HANDLING ---
+        // This function will create and play the sound directly.
+        // This can sometimes be more successful in bypassing autoplay policies.
+        function playSound() {
+            console.log('Attempting to play sound.');
+            const audio = new Audio('crickets.mp3');
+            const playPromise = audio.play();
+
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    // Log the error silently instead of showing a message on screen.
+                    // This is better for a browser source that isn't meant to be seen.
+                    console.error("Audio playback failed:", error);
+                });
+            }
         }
 
         // Create a new TMI client
@@ -57,9 +74,6 @@
 
             const trimmedMessage = message.trim();
 
-            // --- MODIFIED LOGIC ---
-            // Check if the trimmed message STARTS WITH the trigger message.
-            // This will catch "..." and "... " with invisible characters.
             if (trimmedMessage.startsWith(triggerMessage)) {
                 consecutiveCount++;
                 console.log(`Trigger message detected. Count is now ${consecutiveCount}`);
@@ -74,21 +88,13 @@
 
             if (consecutiveCount >= triggerCount) {
                 console.log('Trigger count reached! Playing sound.');
-                cricketSound.play().catch(error => {
-                    console.error("Audio playback failed:", error);
-                    statusElement.textContent = 'Click page to enable sound!';
-                });
+                playSound(); // Use the new function to play the sound
                 consecutiveCount = 0;
                 updateStatus();
             }
         });
         
         updateStatus();
-
-        document.body.addEventListener('click', () => {
-            cricketSound.play().then(() => cricketSound.pause());
-            console.log('Audio context unlocked by user interaction.');
-        }, { once: true });
 
     </script>
 </body>
