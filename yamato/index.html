@@ -44,8 +44,9 @@
   <div id="log"></div>
 </div>
 
-<!-- tmi.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tmi.js/1.8.5/tmi.min.js"></script>
+<!-- Load LOCAL tmi.js first -->
+<script src="./tmi.min.js"></script>
+
 <script>
 const CLIENT_ID = "n62lboxsur7ytj4lowidq6kdf8spuc";
 const REDIRECT_URI = "https://www.athernals.com/yamato/";
@@ -61,6 +62,13 @@ const log = (m, cls="") => {
   $("log").appendChild(line);
   $("log").scrollTop = $("log").scrollHeight;
 };
+
+// ---- Wait for tmi.js to exist before doing anything
+function ensureTmi() {
+  if (window.tmi) return true;
+  log("tmi.js failed to load. Make sure ./tmi.min.js is the browser UMD build (from /dist) and not the Node version.", "warn");
+  return false;
+}
 
 // volume (persist)
 let volume = parseFloat(localStorage.getItem("volumeLevel") || "0.65");
@@ -115,7 +123,6 @@ if (location.hash.includes("access_token=")) {
 if (token) {
   $("loginRow").style.display = "none";
   initWithToken(token).catch(err => {
-    // Token bad → clear & show login again
     console.error(err);
     log(`Login expired/invalid: ${err.message}`, "warn");
     localStorage.removeItem("tw_token");
@@ -132,6 +139,9 @@ if (token) {
 }
 
 async function initWithToken(tok){
+  // Make sure tmi.js is present BEFORE we go further
+  if (!ensureTmi()) throw new Error("tmi not loaded");
+
   $("controls").style.display = "block";
   $("status").textContent = "validating token…";
   let me;
@@ -158,24 +168,23 @@ async function initWithToken(tok){
 }
 
 async function connectChat(me, tok){
+  if (!ensureTmi()) throw new Error("tmi not loaded");
+
   const client = new tmi.Client({
     options: { debug: false },
     connection: { secure: true, reconnect: true },
     identity: { username: me, password: `oauth:${tok}` },
-    channels: CHANNELS
+    channels: ["yamatosdeath","athernals7"]
   });
 
   let cooldown = false;
-  // yamatosdeath: 3 distinct users in a row
   let ydBlock = false, ydUsers = new Set();
-  // athernals7: token owner can post "..." 3× in a row
   let selfCount = 0;
 
   client.on("disconnected", (reason) => {
     $("status").textContent = "disconnected";
     log("Disconnected: " + (reason || "unknown"), "warn");
   });
-
   client.on("reconnect", () => {
     $("status").textContent = "reconnecting…";
     log("Reconnecting…");
@@ -201,21 +210,14 @@ async function connectChat(me, tok){
     }
   });
 
-  try {
-    await client.connect();
-  } catch (e) {
-    $("status").textContent = "error";
-    log("Connect error: " + (e?.message || e), "warn");
-    throw e;
-  }
+  try { await client.connect(); }
+  catch (e) { $("status").textContent = "error"; log("Connect error: " + (e?.message || e), "warn"); throw e; }
 
   function triggerLocal(){
     const s = new Audio("./crickets.mp3");
     s.volume = volume;
     s.play().catch(e => log("Audio error: " + e, "warn"));
-
-    cooldown = true;
-    setTimeout(() => cooldown = false, 10000); // 10s cooldown
+    cooldown = true; setTimeout(() => cooldown = false, 10000);
   }
 }
 </script>
