@@ -37,6 +37,8 @@
     #loginBtn {
         background-color: #9147ff;
         color: white;
+        font-size: 18px;
+        padding: 14px 22px;
     }
     #loginBtn:hover {
         background-color: #772ce8;
@@ -44,8 +46,8 @@
     #soundBtn {
         background-color: #ff4fd8;
         color: white;
-        font-size: 18px;
-        padding: 14px 22px;
+        font-size: 20px;
+        padding: 16px 26px;
         animation: pulse 1.2s infinite;
     }
     #soundBtn.enabled {
@@ -87,16 +89,20 @@
 <body>
 <div class="container">
     <h1>yamatosdeath</h1>
-    <button id="loginBtn">Login with Twitch</button>
-    <span class="status-chip" id="connStatus">disconnected</span>
-    <br>
-    <button id="soundBtn">Enable Sound</button>
-    <div class="slider-container">
-        <label for="volume">Volume:</label>
-        <input type="range" id="volume" min="0" max="1" step="0.01" value="0.4">
-        <span id="volumeLabel">40%</span>
+    <div id="loginSection">
+        <button id="loginBtn">Login with Twitch</button>
     </div>
-    <div id="log"></div>
+    <div id="mainSection" style="display:none;">
+        <span class="status-chip" id="connStatus">disconnected</span>
+        <br>
+        <button id="soundBtn">Enable Sound</button>
+        <div class="slider-container">
+            <label for="volume">Volume:</label>
+            <input type="range" id="volume" min="0" max="1" step="0.01" value="0.4">
+            <span id="volumeLabel">40%</span>
+        </div>
+        <div id="log"></div>
+    </div>
 </div>
 
 <script src="./tmi.min.js"></script>
@@ -172,8 +178,9 @@ async function connectChat() {
 
 document.getElementById("soundBtn").onclick = () => {
     soundEnabled = true;
-    document.getElementById("soundBtn").innerText = "Sound Enabled";
-    document.getElementById("soundBtn").classList.add("enabled");
+    const btn = document.getElementById("soundBtn");
+    btn.innerText = "Sound Enabled";
+    btn.classList.add("enabled");
     logMsg("Sound enabled");
 };
 
@@ -182,13 +189,14 @@ document.getElementById("volume").oninput = (e) => {
     document.getElementById("volumeLabel").innerText = Math.round(volumeLevel * 100) + "%";
 };
 
-// After OAuth redirect, parse token and auto-connect
+// After OAuth redirect
 if (window.location.hash) {
     const hashParams = new URLSearchParams(window.location.hash.substr(1));
     token = hashParams.get("access_token");
     if (token) {
+        document.getElementById("loginSection").style.display = "none";
+        document.getElementById("mainSection").style.display = "block";
         logMsg("Access token acquired.");
-        document.getElementById("loginBtn").disabled = true;
         connectChat();
     }
 }
