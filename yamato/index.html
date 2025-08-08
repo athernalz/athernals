@@ -16,36 +16,37 @@
 <body class="bg-gray-900 text-white flex items-center justify-center h-screen relative">
     <!-- Updated version tracker -->
     <div class="absolute bottom-4 left-4 text-xs text-gray-500">
-        v0.0.3
+        v0.0.4
     </div>
 
     <div class="text-center p-8 bg-gray-800 rounded-lg shadow-xl">
-        <p class="text-lg text-gray-400 mb-2">Listening to channel: <span class="font-mono text-green-400">yamatosdeath</span></p>
+        <!-- Modified to show multiple channels -->
+        <p class="text-lg text-gray-400 mb-2">Listening to channels: <span id="channel-display" class="font-mono text-green-400"></span></p>
         <div id="status" class="text-2xl font-semibold p-4 rounded-md bg-gray-700">
             Waiting for messages...
         </div>
-        <!-- The audio tag is no longer used for playback control, only for holding the source -->
         <audio id="cricketSound" src="crickets.mp3" preload="auto"></audio>
     </div>
 
     <script>
         // --- Configuration ---
-        const channelName = 'yamatosdeath';
+        // Added athernals7 to the list of channels
+        const channelNames = ['yamatosdeath', 'athernals7'];
         const triggerMessage = '...';
         const triggerCount = 3;
         // ---------------------
 
         const statusElement = document.getElementById('status');
+        const channelDisplayElement = document.getElementById('channel-display');
         let consecutiveCount = 0;
 
-        // Function to update the status display
+        // Update the channel display on the page
+        channelDisplayElement.textContent = channelNames.join(', ');
+
         function updateStatus() {
             statusElement.textContent = `Consecutive "..." count: ${consecutiveCount} / ${triggerCount}`;
         }
 
-        // --- NEW AUDIO HANDLING ---
-        // This function will create and play the sound directly.
-        // This can sometimes be more successful in bypassing autoplay policies.
         function playSound() {
             console.log('Attempting to play sound.');
             const audio = new Audio('crickets.mp3');
@@ -53,16 +54,14 @@
 
             if (playPromise !== undefined) {
                 playPromise.catch(error => {
-                    // Log the error silently instead of showing a message on screen.
-                    // This is better for a browser source that isn't meant to be seen.
                     console.error("Audio playback failed:", error);
                 });
             }
         }
 
-        // Create a new TMI client
+        // Create a new TMI client and pass the array of channels
         const client = new tmi.Client({
-            channels: [channelName]
+            channels: channelNames
         });
 
         // Connect to Twitch IRC
@@ -76,10 +75,10 @@
 
             if (trimmedMessage.startsWith(triggerMessage)) {
                 consecutiveCount++;
-                console.log(`Trigger message detected. Count is now ${consecutiveCount}`);
+                console.log(`Trigger message detected in ${channel}. Count is now ${consecutiveCount}`);
             } else {
                 if (consecutiveCount > 0) {
-                    console.log(`Message "${trimmedMessage}" received. Resetting count.`);
+                    console.log(`Message "${trimmedMessage}" received in ${channel}. Resetting count.`);
                 }
                 consecutiveCount = 0;
             }
@@ -88,7 +87,7 @@
 
             if (consecutiveCount >= triggerCount) {
                 console.log('Trigger count reached! Playing sound.');
-                playSound(); // Use the new function to play the sound
+                playSound();
                 consecutiveCount = 0;
                 updateStatus();
             }
