@@ -18,7 +18,6 @@
   .chip{background:#27272a;padding:6px 10px;border-radius:999px;font-size:12px}
   .warn{background:#3b0d0d;color:#fca5a5}
   #obsBox{display:none;margin-top:14px;background:#0b0b0c;padding:12px;border-radius:10px;font-family:monospace;font-size:13px;word-break:break-all}
-  .vol{display:flex;gap:10px;justify-content:center;align-items:center;margin-top:10px}
   #log{margin-top:12px;background:#000;padding:10px;border-radius:8px;font-size:12px;text-align:left;max-height:260px;overflow:auto}
   .hr{height:1px;background:#2a2a2e;margin:14px 0}
   .ver{position:fixed;left:10px;bottom:8px;color:#9ca3af;font-size:12px;opacity:.7;user-select:none}
@@ -40,19 +39,13 @@
     <div class="row">
       <span id="status" class="chip">connecting…</span>
       <button id="logoutBtn" class="logout">Log out</button>
-      <a id="reloadLink" class="chip" style="cursor:pointer">Reload (cache-bust)</a>
-    </div>
-    <div class="vol">
-      <label for="vol">Volume</label>
-      <input id="vol" type="range" min="0" max="1" step="0.01">
-      <span id="volv" class="chip"></span>
     </div>
   </div>
 
   <div id="log"></div>
 </div>
 
-<div class="ver">v0.0.8</div>
+<div class="ver">v0.0.9</div>
 
 <script>
 const CLIENT_ID = "n62lboxsur7ytj4lowidq6kdf8spuc";
@@ -61,6 +54,10 @@ const SCOPE = "chat:read";
 const CHANNELS = ["yamatosdeath","athernals7"];
 const urlParams = new URLSearchParams(location.search);
 const forceLib = urlParams.get("lib"); // "local" | "cdn" | null
+
+// volume: read ONLY from URL, default 0.7
+const volParam = parseFloat(urlParams.get("vol"));
+const volume = Number.isFinite(volParam) ? Math.max(0, Math.min(1, volParam)) : 0.7;
 
 const $ = id => document.getElementById(id);
 const log = (m, cls="") => {
@@ -72,19 +69,11 @@ const log = (m, cls="") => {
   $("log").scrollTop = $("log").scrollHeight;
 };
 
-// persist volume (default 65%)
-let volume = parseFloat(localStorage.getItem("volumeLevel") || "0.65");
-$("vol").value = volume;
-$("volv").textContent = Math.round(volume*100) + "%";
-$("vol").oninput = e => {
-  volume = parseFloat(e.target.value);
-  localStorage.setItem("volumeLevel", String(volume));
-  $("volv").textContent = Math.round(volume*100) + "%";
+// Logout
+$("logoutBtn").onclick = () => {
+  localStorage.removeItem("tw_token");
+  location.href = location.pathname + "?logged_out=" + Date.now();
 };
-
-// cache-bust reload / logout
-$("reloadLink").onclick = () => location.href = location.pathname + "?v=" + Date.now();
-$("logoutBtn").onclick = () => { localStorage.removeItem("tw_token"); location.href = location.pathname + "?logged_out=" + Date.now(); };
 
 // OAuth start
 $("loginBtn").onclick = () => {
@@ -94,7 +83,8 @@ $("loginBtn").onclick = () => {
 
 // OBS link box
 function showObsLink(tok){
-  const obsUrl = `${location.origin}/yamato/obs.html#token=${tok}`;
+  const volSeg = `&vol=${volume}`;
+  const obsUrl = `${location.origin}/yamato/obs.html#token=${tok}${volSeg}`;
   $("obsBox").style.display = "block";
   $("obsBox").innerHTML = `
     <div><b>Your OBS Browser Source URL</b></div>
@@ -130,7 +120,7 @@ function loadChatLib(){
   });
 }
 
-// Twitch fetch helper
+// Twitch API helper
 async function twitchJSON(path, token){
   const res = await fetch(`https://api.twitch.tv/helix/${path}`, {
     headers: { "Authorization": `Bearer ${token}`, "Client-Id": CLIENT_ID }
@@ -185,12 +175,11 @@ if (location.hash.includes("access_token=")) {
   showObsLink(token);
   $("status").textContent = "connecting…";
 
-  // Create client with debug + explicit joins
   const client = new window.tmi.Client({
     options: { debug: true },
     connection: { secure: true, reconnect: true },
     identity: { username: me, password: `oauth:${token}` },
-    channels: [] // we will join explicitly
+    channels: []
   });
 
   let cooldown=false;
@@ -214,10 +203,10 @@ if (location.hash.includes("access_token=")) {
   client.on("join", (ch, username, self) => { if (self) log(`We joined ${ch}`); });
   client.on("part", (ch, username, self) => { if (self) log(`We left ${ch}`); });
 
-  // temp: show first 10 msgs to prove messages are coming in
+  // brief message echo for confirmation
   let seen = 0;
   client.on("message", (ch, tags, msg) => {
-    if (seen < 10) { log(`msg in ${ch} from ${tags.username}: ${msg}`); seen++; }
+    if (seen < 5) { log(`msg in ${ch} from ${tags.username}: ${msg}`); seen++; }
 
     const m = msg.trim();
     const user = (tags.username || "").toLowerCase();
