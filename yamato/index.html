@@ -4,90 +4,58 @@
 <meta charset="utf-8">
 <title>yamatosdeath OBS Setup</title>
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        background-color: #0e0e10;
-        color: white;
-        display: flex;
-        justify-content: center;
-        padding: 20px;
-    }
-    .container {
-        background: #18181b;
-        border-radius: 12px;
-        padding: 20px;
-        max-width: 500px;
-        width: 100%;
-        box-shadow: 0 0 20px rgba(0,0,0,0.5);
-        text-align: center;
-    }
-    h1 { font-size: 1.4rem; margin-bottom: 10px; }
-    button {
-        border: none;
-        padding: 12px 20px;
-        border-radius: 8px;
-        font-size: 16px;
-        cursor: pointer;
-        background-color: #9147ff;
-        color: white;
-    }
-    button:hover { background-color: #772ce8; }
-    #obsLinkBox {
-        margin-top: 20px;
-        background: black;
-        padding: 10px;
-        border-radius: 6px;
-        font-family: monospace;
-        font-size: 13px;
-        word-break: break-all;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        align-items: center;
-    }
-    .copyBtn {
-        padding: 6px 12px;
-        font-size: 13px;
-        background: #9147ff;
-        border-radius: 6px;
-        cursor: pointer;
-        border: none;
-        color: white;
-    }
-    .copyBtn:hover { background: #772ce8; }
+  body{font-family:Arial, sans-serif;background:#0e0e10;color:#fff;display:flex;justify-content:center;padding:20px}
+  .container{background:#18181b;border-radius:12px;padding:20px;max-width:560px;width:100%;box-shadow:0 0 20px rgba(0,0,0,.5);text-align:center}
+  h1{font-size:1.4rem;margin:0 0 10px}
+  button{border:none;padding:12px 18px;border-radius:10px;font-size:16px;cursor:pointer;background:#9147ff;color:#fff}
+  button:hover{background:#772ce8}
+  #obsLinkBox{margin-top:16px;background:#000;padding:12px;border-radius:8px;font-family:monospace;font-size:13px;word-break:break-all;display:none}
+  .row{display:flex;gap:8px;justify-content:center;align-items:center;margin-top:10px}
+  .chip{background:#222;padding:4px 8px;border-radius:999px;font-size:12px}
 </style>
 </head>
 <body>
 <div class="container">
-    <h1>yamatosdeath OBS Setup</h1>
-    <p>Log in with Twitch to generate your personal OBS link.</p>
-    <button id="loginBtn">Login with Twitch</button>
-    <div id="obsLinkBox" style="display:none;"></div>
+  <h1>OBS Link for yamatosdeath</h1>
+  <p id="hint" class="chip">Login once → copy your OBS link.</p>
+  <div class="row"><button id="loginBtn">Login with Twitch</button></div>
+  <div id="obsLinkBox"></div>
 </div>
 
 <script>
-const CLIENT_ID = "n62lboxsur7ytj4lowidq6kdf8spuc";
-const REDIRECT_URI = "https://www.athernals.com/yamato/";
-const SCOPE = "chat:read";
+const CLIENT_ID="n62lboxsur7ytj4lowidq6kdf8spuc";
+const REDIRECT_URI="https://www.athernals.com/yamato/";
+const SCOPE="chat:read";
 
-document.getElementById("loginBtn").onclick = () => {
-    const url = `https://id.twitch.tv/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=${SCOPE}`;
-    window.location = url;
+function showLink(token){
+  const obsUrl=`${location.origin}/yamato/obs.html#token=${token}`;
+  const box=document.getElementById('obsLinkBox');
+  box.style.display='block';
+  box.innerHTML = `
+    <div><b>Your OBS Link</b></div>
+    <div>${obsUrl}</div>
+    <div class="row">
+      <button id="copyBtn">Copy link</button>
+      <span class="chip">Works ~60 days</span>
+    </div>`;
+  document.getElementById('copyBtn').onclick=()=>navigator.clipboard.writeText(obsUrl);
+  document.getElementById('hint').textContent='Paste this into an OBS Browser Source.';
+}
+
+document.getElementById('loginBtn').onclick=()=>{
+  const url=`https://id.twitch.tv/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=${SCOPE}`;
+  location.href=url;
 };
 
-// Handle OAuth redirect
-if (window.location.hash) {
-    const hashParams = new URLSearchParams(window.location.hash.substr(1));
-    const token = hashParams.get("access_token");
-    if (token) {
-        const obsUrl = `${window.location.origin}/yamato/obs.html#token=${token}`;
-        const box = document.getElementById("obsLinkBox");
-        box.style.display = "flex";
-        box.innerHTML = `
-            <div><strong>Your OBS Link:</strong><br>${obsUrl}</div>
-            <button class="copyBtn" onclick="navigator.clipboard.writeText('${obsUrl}').then(()=>alert('Copied to clipboard'));">Copy Link</button>
-        `;
-    }
+// handle new login
+if(location.hash.includes('access_token=')){
+  const token=new URLSearchParams(location.hash.slice(1)).get('access_token');
+  localStorage.setItem('tw_token',token);
+  history.replaceState({},'',location.pathname); // clean hash
+  showLink(token);
+}else{
+  const saved=localStorage.getItem('tw_token');
+  if(saved){ showLink(saved); } // already logged in → don’t nag
 }
 </script>
 </body>
