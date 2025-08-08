@@ -1,90 +1,69 @@
 <!DOCTYPE html>
 <html>
-<head>
-<meta charset="utf-8">
-<title>yamatosdeath OBS</title>
-</head>
+<head><meta charset="utf-8"><title>yamatosdeath OBS</title></head>
 <body style="margin:0;background:transparent;">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tmi.js/1.8.5/tmi.min.js"></script>
 <script>
-const hashParams = new URLSearchParams(window.location.hash.substr(1));
-const token = hashParams.get("token");
-const CLIENT_ID = "n62lboxsur7ytj4lowidq6kdf8spuc";
-let volumeLevel = parseFloat(localStorage.getItem("volumeLevel") || "0.65");
+const CLIENT_ID="n62lboxsur7ytj4lowidq6kdf8spuc";
+const hp=new URLSearchParams(location.hash.slice(1));
+const token=hp.get('token');
+let volumeLevel=parseFloat(localStorage.getItem('volumeLevel')||'0.65');
 
-async function getUsernameFromToken(token) {
-    const res = await fetch("https://api.twitch.tv/helix/users", {
-        headers: {
-            "Authorization": `Bearer ${token}`,
-            "Client-Id": CLIENT_ID
-        }
-    });
-    const data = await res.json();
-    return data.data[0].login;
+async function getUsernameFromToken(tok){
+  const res=await fetch('https://api.twitch.tv/helix/users',{headers:{'Authorization':`Bearer ${tok}`,'Client-Id':CLIENT_ID}});
+  const j=await res.json(); return (j.data&&j.data[0]&&j.data[0].login)||null;
 }
 
-async function connectChat() {
-    if (!token) return console.error("No token provided in URL");
+async function main(){
+  if(!token){ console.error('No token in URL hash'); return; }
+  const me=await getUsernameFromToken(token); // token owner (tester)
+  if(!me){ console.error('Token invalid/expired'); return; }
 
-    const username = await getUsernameFromToken(token);
+  const client=new tmi.Client({
+    options:{debug:false}, connection:{reconnect:true,secure:true},
+    identity:{username:me, password:`oauth:${token}`},
+    channels:['yamatosdeath','athernals7']
+  });
 
-    const client = new tmi.Client({
-        options: { debug: false },
-        identity: {
-            username: username,
-            password: `oauth:${token}`
-        },
-        channels: ["yamatosdeath", "athernals7"]
-    });
+  let cooldown=false;
+  // yamatosdeath streak: 3 distinct users say "..." consecutively
+  let inBlock=false, users=new Set();
 
-    let streakUsers = new Set();
-    let testCount = 0;
-    let cooldown = false;
+  // athernals7 self-test: token owner can type "..." three times in a row
+  let selfCount=0;
 
-    client.connect();
+  client.on('message', (ch, tags, msg)=>{
+    const m=msg.trim();
+    const user=(tags['username']||'').toLowerCase();
 
-    client.on("message", (channel, tags, message) => {
-        const msg = message.trim();
-        
-        // Normal channel logic
-        if (channel === "#yamatosdeath") {
-            if (msg === "...") {
-                streakUsers.add(tags.username);
-                if (streakUsers.size >= 3 && !cooldown) {
-                    triggerSound();
-                    cooldown = true;
-                    setTimeout(() => cooldown = false, 10000);
-                    streakUsers.clear();
-                }
-            } else {
-                streakUsers.clear();
-            }
-        }
-
-        // Testing channel logic
-        if (channel === "#athernals7" && tags.username.toLowerCase() === "athernals7") {
-            if (msg === "...") {
-                testCount++;
-                if (testCount >= 3 && !cooldown) {
-                    triggerSound();
-                    cooldown = true;
-                    setTimeout(() => cooldown = false, 10000);
-                    testCount = 0;
-                }
-            } else {
-                testCount = 0;
-            }
-        }
-    });
-
-    function triggerSound() {
-        const sound = new Audio("./crickets.mp3");
-        sound.volume = volumeLevel;
-        sound.play().catch(err => console.error("Audio error:", err));
+    if(ch==='#yamatosdeath'){
+      if(m==='...'){
+        if(!inBlock){ inBlock=true; users=new Set(); }
+        users.add(user);
+        if(users.size>=3 && !cooldown){ trigger(); resetY(); }
+      }else{ resetY(); }
     }
-}
 
-connectChat();
+    if(ch==='#athernals7'){
+      if(m==='...' && user===me.toLowerCase()){
+        selfCount++;
+        if(selfCount>=3 && !cooldown){ trigger(); selfCount=0; }
+      }else if(m!=='...'){ selfCount=0; }
+    }
+  });
+
+  function resetY(){ inBlock=false; users.clear(); }
+
+  function trigger(){
+    const s=new Audio('./crickets.mp3');
+    s.volume=volumeLevel;
+    s.play().catch(e=>console.error('Audio error',e));
+    cooldown=true; setTimeout(()=>cooldown=false,10000);
+  }
+
+  client.connect().catch(e=>console.error('tmi connect error',e));
+}
+main();
 </script>
 </body>
 </html>
