@@ -1,30 +1,43 @@
 <!DOCTYPE html>
 <html>
-<meta http-equiv="Cache-Control" content="no-store, max-age=0">  
-<head><meta charset="utf-8"><title>yamatosdeath – OBS</title></head>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-store, max-age=0">
+<title>Crickets – OBS</title>
+</head>
 <body style="margin:0;background:transparent;">
-<!-- Load LOCAL tmi -->
-<script src="./chatlib.min.js"></script>
 <script>
 const CLIENT_ID="n62lboxsur7ytj4lowidq6kdf8spuc";
 const hp=new URLSearchParams(location.hash.slice(1));
 const token=hp.get("token");
 let volumeLevel=parseFloat(localStorage.getItem("volumeLevel")||"0.65");
 
-function haveTmi(){ return !!window.tmi || (console.error("tmi.js failed to load (./tmi.min.js)"), false); }
+function loadChatLib(){
+  return new Promise((resolve, reject)=>{
+    const tryLoad=(src, onFail)=>{
+      const s=document.createElement("script");
+      s.src=src;
+      s.onload=()=>window.tmi?resolve():onFail();
+      s.onerror=onFail;
+      document.body.appendChild(s);
+    };
+    const v="v="+Date.now();
+    tryLoad("./chatlib.min.js?"+v, ()=>tryLoad("https://cdnjs.cloudflare.com/ajax/libs/tmi.js/1.8.5/tmi.min.js?"+v, ()=>reject(new Error("no chat lib"))));
+  });
+}
 
 async function getMe(tok){
-  const res=await fetch('https://api.twitch.tv/helix/users',{headers:{Authorization:`Bearer ${tok}`,"Client-Id":CLIENT_ID}});
+  const res=await fetch("https://api.twitch.tv/helix/users",{headers:{Authorization:`Bearer ${tok}`,"Client-Id":CLIENT_ID}});
   const j=await res.json(); return j?.data?.[0]?.login?.toLowerCase()||null;
 }
 
-async function main(){
+(async function main(){
   if(!token){ console.error("No token in URL."); return; }
-  if(!haveTmi()) return;
+  try{ await loadChatLib(); }catch(e){ console.error("tmi load failed",e); return; }
 
-  const me = await getMe(token); if(!me){ console.error("Token invalid/expired"); return; }
+  const me=await getMe(token); if(!me){ console.error("Token invalid/expired"); return; }
 
-  const client=new tmi.Client({
+  const client=new window.tmi.Client({
     options:{debug:false}, connection:{secure:true,reconnect:true},
     identity:{username:me,password:`oauth:${token}`},
     channels:["yamatosdeath","athernals7"]
@@ -60,8 +73,7 @@ async function main(){
     s.play().catch(e=>console.error("Audio error:",e));
     cooldown=true; setTimeout(()=>cooldown=false,10000);
   }
-}
-main();
+})();
 </script>
 </body>
 </html>
