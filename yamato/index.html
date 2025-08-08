@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Crickets on triple-ellipsis</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://unpkg.com/tmi.js@1.8.5/dist/tmi.min.js"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 20px; }
+    .row { margin: 8px 0; display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+    .badge { display:inline-block; padding:2px 8px; border-radius:999px; background:#eee; }
+    button { padding:8px 12px; border-radius:8px; border:1px solid #ccc; cursor:pointer; }
+    #log { max-height: 280px; overflow:auto; border:1px solid #eee; padding:8px; margin-top:8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px;}
+    .warn { background:#fff7d6; border:1px solid #ffda6a; padding:8px; border-radius:8px;}
+  </style>
+</head>
+<body>
+  <h1>Crickets on "..." x3 (distinct users)</h1>
+
+  <div id="fileWarn" class="warn" style="display:none">
+    ⚠️ You opened this page via <b>file://</b>. Many browsers block WebSocket auth here.
+    Please run a tiny server (e.g. <code>python -m http.server 8080</code>) and open the
+    <b>http://</b> URL instead.
+  </div>
+
+  <div class="row">
+    <label>Channel:
+      <input id="chan" value="yamatosdeath" />
+    </label>
+    <button id="connectBtn">Connect</button>
+    <span id="conn" class="badge">disconnected</span>
+  </div>
+
+  <div class="row">
+    <button id="enableSound">Enable sound</button>
+    <span id="soundStatus" class="badge">sound: blocked</span>
+    <span id="streak" class="badge">streak: 0 users</span>
+    <span id="cooldown" class="badge">cooldown: ready</span>
+  </div>
+
+  <div id="log" aria-live="polite"></div>
+
+  <audio id="crickets" preload="auto">
+    <source src="crickets.sfx">
+    <source src="crickets.mp3" type="audio/mpeg">
+    <source src="crickets.wav" type="audio/wav">
+  </audio>
+
+  <script>
+    // --- file:// warning ---
+    if (location.protocol === 'file:') {
+      document.getElementById('fileWarn').style.display = 'block';
+    }
+
+    const $ = (id) => document.getElementById(id);
+    const status = {
+      conn: $('conn'),
+      streak: $('streak'),
+      cooldown: $('cooldown'),
+      soundStatus: $('soundStatus'),
+      log: $('log'),
+      chan: $('chan'),
+      connectBtn: $('connectBtn')
+    };
+    function log(line) {
+      const ts = new Date().toLocaleTimeString();
+      const p = document.createElement('div');
+      p.textContent = `[${ts}] ${line}`;
+      status.log.appendChild(p);
+      status.log.scrollTop = status.log.scrollHeight;
+      console.log(line);
+    }
+
+    // --- Sound priming ---
+    const audio = $('crickets');
+    let soundEnabled = false;
+    $('enableSound').addEventListener('click', async () => {
+      try { await audio.play().catch(() => {}); audio.pause(); soundEnabled = true;
+        status.soundStatus.textContent = 'sound: enabled'; log('✅ Sound enabled');
+      } catch (e) { log('⚠️ Could not enable sound: ' + e.message); }
+    });
+
+    // --- Cooldown ---
+    let onCooldown = false;
+    const COOLDOWN_MS = 5000;
+    async function triggerCrickets() {
+      if (onCooldown || !soundEnabled) return;
+      onCooldown = true;
+      status.cooldown.textContent = 'cooldown: active';
+      try { await audio.play(); } catch (e) { log('⚠️ Audio play blocked: ' + e.message); }
+      setTimeout(() => { onCooldown = false; status.cooldown.textContent = 'cooldown: ready'; }, COOLDOWN_MS);
+    }
+
+    // --- Ellipsis streak tracking ---
+    let lastWasEllipsis = false;
+    let ellipsisUsers = new Set();
+    function resetStreak() { lastWasEllipsis = false; ellipsisUsers.clear(); status.streak.textContent = 'streak: 0 users'; }
+    function handleMessage(username, message) {
+      const msg = (message || '').trim();
+      if (msg === '...') {
+        if (!lastWasEllipsis) { ellipsisUsers = new Set(); lastWasEllipsis = true; }
+        if (!ellipsisUsers.has(username)) { ellipsisUsers.add(username); }
+        status.streak.textContent = `streak: ${ellipsisUsers.size} user${ellipsisUsers.size===1?'':'s'}`;
+        if (ellipsisUsers.size >= 3) { log(`🎯 Triggered by: ${Array.from(ellipsisUsers).join(', ')}`); triggerCrickets(); resetStreak(); }
+      } else {
+        if (lastWasEllipsis) log('— streak broken —');
+        resetStreak();
+      }
+    }
+
+    // --- Twitch connect / diagnostics ---
+    let client = null;
+    function destroyClient() {
+      if (client) { try { client.removeAllListeners(); client.disconnect(); } catch(_){} client = null; }
+    }
+
+    function connect() {
+      destroyClient();
+      const channel = status.chan.value.trim().replace(/^#/, '').toLowerCase();
+      if (!channel) { alert('Enter a channel'); return; }
+
+      // options.debug gives verbose console logs from tmi.js
+      client = new tmi.Client({
+        options: { debug: true },
+        connection: { secure: true, reconnect: true },
+        channels: [channel] // anonymous read-only
+      });
+
+      client.on('connecting', (addr, port) => { status.conn.textContent = 'connecting'; log(`Connecting to ${addr}:${port} (secure)`); });
+      client.on('logon', () => log('Logon (anonymous)'));
+      client.on('connected', (_addr, _port) => { status.conn.textContent = 'connected'; log(`✅ Connected to #${channel}`); });
+      client.on('reconnect', () => { status.conn.textContent = 'reconnecting'; log('Reconnecting…'); });
+      client.on('disconnected', (reason) => { status.conn.textContent = 'disconnected'; log('❌ Disconnected: ' + reason); });
+
+      client.on('notice', (_ch, msgid, msg) => log(`NOTICE [${msgid}]: ${msg}`));
+      client.on('message', (ch, userstate, message, self) => {
+        if (self) return;
+        const user = userstate['display-name'] || userstate['username'] || userstate['login'] || 'someone';
+        handleMessage(user, message);
+      });
+
+      client.connect().catch(err => {
+        status.conn.textContent = 'disconnected';
+        log('❌ Connect error: ' + (err?.message || err));
+        if (location.protocol === 'file:') log('Hint: serve over http:// instead of file://');
+      });
+    }
+
+    status.connectBtn.addEventListener('click', connect);
+
+    // Auto-connect once if not file:// (you can still hit Connect again)
+    if (location.protocol !== 'file:') connect();
+  </script>
+</body>
+</html>
