@@ -3,10 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Changed website title -->
     <title>YamatosDeath</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Changed this line to use your local file -->
     <script src="chatlib.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
@@ -16,13 +14,12 @@
     </style>
 </head>
 <body class="bg-gray-900 text-white flex items-center justify-center h-screen relative">
-    <!-- Added version tracker -->
+    <!-- Updated version tracker -->
     <div class="absolute bottom-4 left-4 text-xs text-gray-500">
-        v0.0.1
+        v0.0.2
     </div>
 
     <div class="text-center p-8 bg-gray-800 rounded-lg shadow-xl">
-        <!-- Removed the H1 title -->
         <p class="text-lg text-gray-400 mb-2">Listening to channel: <span class="font-mono text-green-400">yamatosdeath</span></p>
         <div id="status" class="text-2xl font-semibold p-4 rounded-md bg-gray-700">
             Waiting for messages...
@@ -47,7 +44,6 @@
         }
 
         // Create a new TMI client
-        // This should now work because chatlib.min.js defines the "tmi" object
         const client = new tmi.Client({
             channels: [channelName]
         });
@@ -57,49 +53,38 @@
 
         // Listen for messages
         client.on('message', (channel, tags, message, self) => {
-            // Ignore messages from the bot itself
             if (self) return;
 
-            // Trim whitespace from the message
             const trimmedMessage = message.trim();
 
-            // This logic counts any consecutive "..." messages, regardless of the user.
-            // If any other message appears, the count resets.
-            if (trimmedMessage === triggerMessage) {
-                // If the message is "...", increment the counter
+            // --- MODIFIED LOGIC ---
+            // Check if the trimmed message STARTS WITH the trigger message.
+            // This will catch "..." and "... " with invisible characters.
+            if (trimmedMessage.startsWith(triggerMessage)) {
                 consecutiveCount++;
-                console.log(`'...' received. Count is now ${consecutiveCount}`);
+                console.log(`Trigger message detected. Count is now ${consecutiveCount}`);
             } else {
-                // If any other message is received, reset the counter
                 if (consecutiveCount > 0) {
                     console.log(`Message "${trimmedMessage}" received. Resetting count.`);
                 }
                 consecutiveCount = 0;
             }
 
-            // Update the status on the page
             updateStatus();
 
-            // Check if the trigger count has been reached
             if (consecutiveCount >= triggerCount) {
                 console.log('Trigger count reached! Playing sound.');
-                // Play the sound
                 cricketSound.play().catch(error => {
                     console.error("Audio playback failed:", error);
-                    // Browsers often block autoplay until the user interacts with the page.
-                    // A message can be shown to the user to click the page to enable audio.
                     statusElement.textContent = 'Click page to enable sound!';
                 });
-                // Reset the counter after playing the sound
                 consecutiveCount = 0;
                 updateStatus();
             }
         });
         
-        // Initial status update
         updateStatus();
 
-        // A fix for browser autoplay policies. The user might need to click the page once.
         document.body.addEventListener('click', () => {
             cricketSound.play().then(() => cricketSound.pause());
             console.log('Audio context unlocked by user interaction.');
