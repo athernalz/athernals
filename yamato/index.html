@@ -1,241 +1,107 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8" />
+<meta charset="UTF-8">
+<title>yamatosdeath</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Cache-Control" content="no-store, max-age=0">
-<title>Crickets Trigger (local + OBS)</title>
 <style>
-  body{font-family:Arial, sans-serif;background:#0e0e10;color:#fff;display:flex;justify-content:center;padding:24px}
-  .card{background:#1a1b1f;border-radius:14px;padding:20px;max-width:680px;width:100%;box-shadow:0 0 24px rgba(0,0,0,.45);text-align:center}
-  h1{margin:0 0 12px;font-size:20px}
-  .row{display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap}
-  button{border:none;padding:12px 18px;border-radius:10px;font-size:16px;cursor:pointer;background:#9147ff;color:#fff}
-  button:hover{background:#772ce8}
-  .copy{padding:8px 12px;border-radius:8px;background:#3b82f6}
-  .copy:hover{background:#2563eb}
-  .logout{background:#374151}
-  .logout:hover{background:#4b5563}
-  .chip{background:#27272a;padding:6px 10px;border-radius:999px;font-size:12px}
-  .warn{background:#3b0d0d;color:#fca5a5}
-  #obsBox{display:none;margin-top:14px;background:#0b0b0c;padding:12px;border-radius:10px;font-family:monospace;font-size:13px;word-break:break-all}
-  #log{margin-top:12px;background:#000;padding:10px;border-radius:8px;font-size:12px;text-align:left;max-height:260px;overflow:auto}
-  .hr{height:1px;background:#2a2a2e;margin:14px 0}
-  .ver{position:fixed;left:10px;bottom:8px;color:#9ca3af;font-size:12px;opacity:.7;user-select:none}
+    body { font-family: Arial, sans-serif; background: #1e1e1e; color: white; margin:0; padding:0; text-align:center; }
+    h1 { margin-top: 20px; }
+    button { padding: 10px 20px; margin: 10px; font-size: 18px; cursor: pointer; background: #4a90e2; border: none; border-radius: 5px; color: white; }
+    button:hover { background: #357ab8; }
+    #log { background: black; padding: 10px; height: 300px; overflow-y: auto; font-family: monospace; text-align:left; }
+    .ver { position: fixed; bottom: 5px; left: 10px; color: gray; font-size: 12px; }
 </style>
 </head>
 <body>
-<div class="card">
-  <h1>Crickets Trigger (local + OBS)</h1>
-
-  <div id="loginRow" class="row">
+    <h1>yamatosdeath</h1>
     <button id="loginBtn">Login with Twitch</button>
-    <span id="hint" class="chip">Login once → copy your OBS link.</span>
-  </div>
+    <button id="connectBtn" style="display:none;">Connect</button>
+    <button id="enableSoundBtn" style="display:none;">Enable Sound</button>
+    <div id="log"></div>
+    <div class="ver">v0.0.9</div>
 
-  <div id="obsBox"></div>
-  <div class="hr"></div>
-
-  <div id="controls" style="display:none;margin-top:6px">
-    <div class="row">
-      <span id="status" class="chip">connecting…</span>
-      <button id="logoutBtn" class="logout">Log out</button>
-    </div>
-  </div>
-
-  <div id="log"></div>
-</div>
-
-<div class="ver">v0.0.9</div>
-
+<script src="./chatlib.min.js?v=9"></script>
 <script>
 const CLIENT_ID = "n62lboxsur7ytj4lowidq6kdf8spuc";
 const REDIRECT_URI = "https://www.athernals.com/yamato/";
-const SCOPE = "chat:read";
-const CHANNELS = ["yamatosdeath","athernals7"];
-const urlParams = new URLSearchParams(location.search);
-const forceLib = urlParams.get("lib"); // "local" | "cdn" | null
+const CHANNEL = "yamatosdeath";
 
-// volume: read ONLY from URL, default 0.7
-const volParam = parseFloat(urlParams.get("vol"));
-const volume = Number.isFinite(volParam) ? Math.max(0, Math.min(1, volParam)) : 0.7;
+const cricket = new Audio("crickets.sfx");
+let token = localStorage.getItem("tw_token") || null;
+let cooldown = false;
+let streak = 0;
 
-const $ = id => document.getElementById(id);
-const log = (m, cls="") => {
-  const t = new Date().toLocaleTimeString();
-  const line = document.createElement("div");
-  line.textContent = `[${t}] ${m}`;
-  if (cls) line.className = cls;
-  $("log").appendChild(line);
-  $("log").scrollTop = $("log").scrollHeight;
-};
-
-// Logout
-$("logoutBtn").onclick = () => {
-  localStorage.removeItem("tw_token");
-  location.href = location.pathname + "?logged_out=" + Date.now();
-};
-
-// OAuth start
-$("loginBtn").onclick = () => {
-  const u = `https://id.twitch.tv/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=${SCOPE}`;
-  location.href = u;
-};
-
-// OBS link box
-function showObsLink(tok){
-  const volSeg = `&vol=${volume}`;
-  const obsUrl = `${location.origin}/yamato/obs.html#token=${tok}${volSeg}`;
-  $("obsBox").style.display = "block";
-  $("obsBox").innerHTML = `
-    <div><b>Your OBS Browser Source URL</b></div>
-    <div>${obsUrl}</div>
-    <div class="row"><button class="copy" id="copyBtn">Copy link</button><span class="chip">Works ~60 days</span></div>`;
-  $("copyBtn").onclick = () => navigator.clipboard.writeText(obsUrl);
+const logDiv = document.getElementById("log");
+function log(msg) {
+    const line = document.createElement("div");
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    logDiv.appendChild(line);
+    logDiv.scrollTop = logDiv.scrollHeight;
 }
 
-// Load chat lib: local first, then CDN (or forced)
-function loadChatLib(){
-  return new Promise((resolve, reject)=>{
-    const v = "v=" + Date.now();
-    const tryLoad = (src, next) => {
-      const s = document.createElement("script");
-      s.src = src + (src.includes("?")?"&":"?") + v;
-      s.onload = () => window.tmi ? resolve() : next();
-      s.onerror = next;
-      document.body.appendChild(s);
-    };
-    if (forceLib === "cdn") {
-      tryLoad("https://cdnjs.cloudflare.com/ajax/libs/tmi.js/1.8.5/tmi.min.js", ()=>reject(new Error("CDN blocked")));
-      return;
-    }
-    if (forceLib === "local") {
-      tryLoad("./chatlib.min.js", ()=>reject(new Error("Local lib blocked/missing")));
-      return;
-    }
-    tryLoad("./chatlib.min.js", ()=> {
-      tryLoad("https://cdnjs.cloudflare.com/ajax/libs/tmi.js/1.8.5/tmi.min.js", ()=> {
-        reject(new Error("Local & CDN chat library blocked"));
-      });
+// URL volume
+const urlParams = new URLSearchParams(window.location.search);
+const volume = parseFloat(urlParams.get("vol")) || 0.7;
+cricket.volume = volume;
+
+document.getElementById("loginBtn").onclick = () => {
+    const url = `https://id.twitch.tv/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=chat:read`;
+    window.location = url;
+};
+
+if (window.location.hash.includes("access_token")) {
+    token = window.location.hash.match(/access_token=([^&]+)/)[1];
+    localStorage.setItem("tw_token", token);
+    window.location.hash = "";
+}
+
+if (token) {
+    document.getElementById("loginBtn").style.display = "none";
+    document.getElementById("connectBtn").style.display = "inline-block";
+}
+
+document.getElementById("enableSoundBtn").onclick = () => {
+    cricket.play().then(() => {
+        cricket.pause();
+        cricket.currentTime = 0;
+        log("Sound enabled");
     });
-  });
-}
+};
 
-// Twitch API helper
-async function twitchJSON(path, token){
-  const res = await fetch(`https://api.twitch.tv/helix/${path}`, {
-    headers: { "Authorization": `Bearer ${token}`, "Client-Id": CLIENT_ID }
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-  return res.json();
-}
+document.getElementById("connectBtn").onclick = () => {
+    document.getElementById("connectBtn").style.display = "none";
+    document.getElementById("enableSoundBtn").style.display = "inline-block";
 
-// Token flow
-let token = null;
-if (location.hash.includes("access_token=")) {
-  token = new URLSearchParams(location.hash.slice(1)).get("access_token");
-  localStorage.setItem("tw_token", token);
-  history.replaceState({}, "", location.pathname + location.search); // clean hash
-} else {
-  token = localStorage.getItem("tw_token");
-}
+    const client = new tmi.Client({
+        options: { debug: true },
+        connection: { secure: true, reconnect: true },
+        identity: { username: "justinfan" + Math.floor(Math.random()*80000), password: "oauth:" + token },
+        channels: []
+    });
 
-// Main
-(async function init(){
-  if (!token) {
-    $("loginRow").style.display = "flex";
-    $("controls").style.display = "none";
-    $("obsBox").style.display = "none";
-    log("Please log in with Twitch to start.");
-    return;
-  }
+    client.connect().then(() => {
+        log("Connected to Twitch IRC.");
+        client.join(CHANNEL).then(() => log(`Joined #${CHANNEL}`));
+    });
 
-  $("loginRow").style.display = "none";
-  $("controls").style.display = "block";
-  $("status").textContent = "loading chat lib…";
-
-  try { await loadChatLib(); }
-  catch (e) { $("status").textContent = "error"; log("Chat library failed to load. Try '?lib=cdn' or disable extensions.", "warn"); log(e.message, "warn"); return; }
-
-  $("status").textContent = "validating token…";
-  let me;
-  try {
-    const u = await twitchJSON("users", token);
-    me = (u?.data?.[0]?.login || "").toLowerCase();
-    if (!me) throw new Error("No user in token");
-  } catch (e) {
-    $("status").textContent = "auth failed";
-    log("Token invalid/expired. Please log in again.", "warn");
-    localStorage.removeItem("tw_token");
-    $("loginRow").style.display = "flex";
-    $("controls").style.display = "none";
-    $("obsBox").style.display = "none";
-    return;
-  }
-
-  showObsLink(token);
-  $("status").textContent = "connecting…";
-
-  const client = new window.tmi.Client({
-    options: { debug: true },
-    connection: { secure: true, reconnect: true },
-    identity: { username: me, password: `oauth:${token}` },
-    channels: []
-  });
-
-  let cooldown=false;
-  let ydBlock=false, ydUsers=new Set();
-  let selfCount=0;
-
-  client.on("connected", async () => {
-    $("status").textContent = "connected";
-    log("Connected to Twitch IRC as " + me + ".");
-    try {
-      await Promise.all([
-        client.join("yamatosdeath").then(()=>log("Joined #yamatosdeath")),
-        client.join("athernals7").then(()=>log("Joined #athernals7"))
-      ]);
-    } catch (err) {
-      log("Join error: " + (err?.message || err), "warn");
-    }
-  });
-
-  client.on("roomstate", (ch, state) => log(`roomstate for ${ch}: ${JSON.stringify(state)}`));
-  client.on("join", (ch, username, self) => { if (self) log(`We joined ${ch}`); });
-  client.on("part", (ch, username, self) => { if (self) log(`We left ${ch}`); });
-
-  // brief message echo for confirmation
-  let seen = 0;
-  client.on("message", (ch, tags, msg) => {
-    if (seen < 5) { log(`msg in ${ch} from ${tags.username}: ${msg}`); seen++; }
-
-    const m = msg.trim();
-    const user = (tags.username || "").toLowerCase();
-
-    if (ch === "#yamatosdeath") {
-      if (m === "...") {
-        if (!ydBlock){ ydBlock = true; ydUsers = new Set(); }
-        ydUsers.add(user);
-        if (ydUsers.size >= 3 && !cooldown) { triggerLocal(); ydBlock=false; ydUsers.clear(); }
-      } else { ydBlock=false; ydUsers.clear(); }
-    }
-
-    if (ch === "#athernals7") {
-      if (m === "..." && user === me) {
-        selfCount++;
-        if (selfCount >= 3 && !cooldown) { triggerLocal(); selfCount = 0; }
-      } else if (m !== "...") { selfCount = 0; }
-    }
-  });
-
-  client.connect().catch(e => { $("status").textContent="error"; log("Connect error: " + (e?.message || e), "warn"); });
-
-  function triggerLocal(){
-    const s = new Audio("./crickets.mp3");
-    s.volume = volume;
-    s.play().catch(e => log("Audio error: " + e, "warn"));
-    cooldown = true; setTimeout(()=>cooldown=false,10000);
-  }
-})();
+    client.on("message", (ch, tags, msg, self) => {
+        if (self) return;
+        if (msg.trim() === "...") {
+            streak++;
+            if (streak >= 3 && !cooldown) {
+                cricket.play();
+                log("played sound");
+                cooldown = true;
+                setTimeout(() => cooldown = false, 10000);
+                streak = 0;
+            }
+        } else {
+            streak = 0;
+        }
+    });
+};
 </script>
 </body>
 </html>
