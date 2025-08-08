@@ -98,8 +98,8 @@
         <button id="soundBtn">Enable Sound</button>
         <div class="slider-container">
             <label for="volume">Volume:</label>
-            <input type="range" id="volume" min="0" max="1" step="0.01" value="0.4">
-            <span id="volumeLabel">40%</span>
+            <input type="range" id="volume" min="0" max="1" step="0.01">
+            <span id="volumeLabel"></span>
         </div>
         <div id="log"></div>
     </div>
@@ -114,9 +114,13 @@ let token = null;
 let username = null;
 let client = null;
 let soundEnabled = false;
-let volumeLevel = 0.4;
+let volumeLevel = parseFloat(localStorage.getItem("volumeLevel") || "0.65"); // default 65%
 let streakUsers = new Set();
 let cooldown = false;
+
+// Set initial volume UI
+document.getElementById("volume").value = volumeLevel;
+document.getElementById("volumeLabel").innerText = Math.round(volumeLevel * 100) + "%";
 
 function logMsg(msg) {
     const logBox = document.getElementById("log");
@@ -186,6 +190,7 @@ document.getElementById("soundBtn").onclick = () => {
 
 document.getElementById("volume").oninput = (e) => {
     volumeLevel = parseFloat(e.target.value);
+    localStorage.setItem("volumeLevel", volumeLevel.toString());
     document.getElementById("volumeLabel").innerText = Math.round(volumeLevel * 100) + "%";
 };
 
@@ -201,7 +206,6 @@ if (window.location.hash) {
         connectChat();
     }
 } else {
-    // If we already have a saved token, reuse it
     const savedToken = localStorage.getItem("twitch_token");
     if (savedToken) {
         token = savedToken;
@@ -210,7 +214,6 @@ if (window.location.hash) {
         logMsg("Using saved login.");
         connectChat();
     } else {
-        // No token → ask user to log in
         logMsg("Please log in with Twitch to start.");
     }
 }
