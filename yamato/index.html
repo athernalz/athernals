@@ -158,15 +158,15 @@ async function connectChat() {
     }).catch(err => logMsg(`Connection error: ${err}`));
 
     client.on("message", (channel, tags, message) => {
-        if (message.trim() === "...") {
-            streakUsers.add(tags.username);
-            if (streakUsers.size >= 3 && !cooldown && soundEnabled) {
-                audio.play();
-                logMsg("Crickets triggered!");
-                cooldown = true;
-                setTimeout(() => cooldown = false, 10000);
-                streakUsers.clear();
-            }
+if (streakUsers.size >= 3 && !cooldown && soundEnabled) {
+    const sound = new Audio("./crickets.mp3");
+    sound.volume = audio.volume; // match the current slider volume
+    sound.play().catch(err => logMsg(`Audio error: ${err}`));
+    logMsg("Crickets triggered!");
+    cooldown = true;
+    setTimeout(() => cooldown = false, 10000); // 10s cooldown
+    streakUsers.clear();
+}
         } else {
             streakUsers.clear();
         }
