@@ -2,20 +2,25 @@
 <html>
 <head><meta charset="utf-8"><title>yamatosdeath – OBS</title></head>
 <body style="margin:0;background:transparent;">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tmi.js/1.8.5/tmi.min.js"></script>
+<!-- Load LOCAL tmi -->
+<script src="./tmi.min.js"></script>
 <script>
 const CLIENT_ID="n62lboxsur7ytj4lowidq6kdf8spuc";
 const hp=new URLSearchParams(location.hash.slice(1));
 const token=hp.get("token");
 let volumeLevel=parseFloat(localStorage.getItem("volumeLevel")||"0.65");
 
+function haveTmi(){ return !!window.tmi || (console.error("tmi.js failed to load (./tmi.min.js)"), false); }
+
 async function getMe(tok){
-  const res=await fetch("https://api.twitch.tv/helix/users",{headers:{Authorization:`Bearer ${tok}`,"Client-Id":CLIENT_ID}});
+  const res=await fetch('https://api.twitch.tv/helix/users',{headers:{Authorization:`Bearer ${tok}`,"Client-Id":CLIENT_ID}});
   const j=await res.json(); return j?.data?.[0]?.login?.toLowerCase()||null;
 }
 
 async function main(){
   if(!token){ console.error("No token in URL."); return; }
+  if(!haveTmi()) return;
+
   const me = await getMe(token); if(!me){ console.error("Token invalid/expired"); return; }
 
   const client=new tmi.Client({
@@ -24,9 +29,7 @@ async function main(){
     channels:["yamatosdeath","athernals7"]
   });
 
-  let cooldown=false;
-  let ydBlock=false, ydUsers=new Set();
-  let selfCount=0;
+  let cooldown=false, ydBlock=false, ydUsers=new Set(), selfCount=0;
 
   client.on("message",(ch,tags,message)=>{
     const m=message.trim();
@@ -48,14 +51,14 @@ async function main(){
     }
   });
 
+  client.connect().catch(e=>console.error("tmi connect error",e));
+
   function trigger(){
     const s=new Audio("./crickets.mp3");
     s.volume=volumeLevel;
     s.play().catch(e=>console.error("Audio error:",e));
     cooldown=true; setTimeout(()=>cooldown=false,10000);
   }
-
-  client.connect().catch(e=>console.error("tmi connect error",e));
 }
 main();
 </script>
