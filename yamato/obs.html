@@ -1,94 +1,60 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
+<meta charset="UTF-8">
+<title>yamatosdeath OBS</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Cache-Control" content="no-store, max-age=0">
-<title>Crickets – OBS</title>
-<style>.ver{position:fixed;left:8px;bottom:6px;color:#9ca3af;font-size:12px;opacity:.7}</style>
+<style>
+    body { margin:0; background:transparent; }
+</style>
 </head>
-<body style="margin:0;background:transparent;">
-<div class="ver">v0.0.9</div>
+<body>
+<script src="./chatlib.min.js?v=9"></script>
 <script>
-const CLIENT_ID="n62lboxsur7ytj4lowidq6kdf8spuc";
-const hp=new URLSearchParams(location.hash.slice(1));
-const token=hp.get("token");
-const forceLib=hp.get("lib");
-// volume from hash, default 0.7
-const volParam=parseFloat(hp.get("vol"));
-const volumeLevel=Number.isFinite(volParam)?Math.max(0,Math.min(1,volParam)):0.7;
+const CHANNEL = "yamatosdeath";
+const cricket = new Audio("crickets.sfx");
+let cooldown = false;
+let streak = 0;
 
-function loadChatLib(){
-  return new Promise((resolve,reject)=>{
-    const v="v="+Date.now();
-    const tryLoad=(src,next)=>{
-      const s=document.createElement("script");
-      s.src=src+(src.includes("?")?"&":"?")+v;
-      s.onload=()=>window.tmi?resolve():next();
-      s.onerror=next;
-      document.body.appendChild(s);
-    };
-    if(forceLib==="cdn") return tryLoad("https://cdnjs.cloudflare.com/ajax/libs/tmi.js/1.8.5/tmi.min.js",()=>reject(new Error("CDN blocked")));
-    if(forceLib==="local") return tryLoad("./chatlib.min.js",()=>reject(new Error("Local lib blocked")));
-    tryLoad("./chatlib.min.js",()=>tryLoad("https://cdnjs.cloudflare.com/ajax/libs/tmi.js/1.8.5/tmi.min.js",()=>reject(new Error("Local & CDN blocked"))));
-  });
+// Volume from URL
+const urlParams = new URLSearchParams(window.location.search);
+const volume = parseFloat(urlParams.get("vol")) || 0.7;
+cricket.volume = volume;
+
+const tokenMatch = window.location.hash.match(/access_token=([^&]+)/);
+const token = tokenMatch ? tokenMatch[1] : localStorage.getItem("tw_token");
+
+if (token) {
+    localStorage.setItem("tw_token", token);
+
+    const client = new tmi.Client({
+        options: { debug: false },
+        connection: { secure: true, reconnect: true },
+        identity: { username: "justinfan" + Math.floor(Math.random()*80000), password: "oauth:" + token },
+        channels: []
+    });
+
+    client.connect().then(() => {
+        client.join(CHANNEL);
+    });
+
+    client.on("message", (ch, tags, msg, self) => {
+        if (self) return;
+        if (msg.trim() === "...") {
+            streak++;
+            if (streak >= 3 && !cooldown) {
+                cricket.play();
+                console.log("played sound");
+                cooldown = true;
+                setTimeout(() => cooldown = false, 10000);
+                streak = 0;
+            }
+        } else {
+            streak = 0;
+        }
+    });
 }
-
-async function getMe(tok){
-  const r=await fetch("https://api.twitch.tv/helix/users",{headers:{Authorization:`Bearer ${tok}`,"Client-Id":CLIENT_ID}});
-  const j=await r.json(); return j?.data?.[0]?.login?.toLowerCase()||null;
-}
-
-(async function main(){
-  if(!token){ console.error("No token in URL."); return; }
-  try{ await loadChatLib(); }catch(e){ console.error("tmi load failed",e); return; }
-  const me=await getMe(token); if(!me){ console.error("Token invalid/expired"); return; }
-
-  const client=new window.tmi.Client({
-    options:{debug:true},
-    connection:{secure:true,reconnect:true},
-    identity:{username:me,password:`oauth:${token}`},
-    channels:[]
-  });
-
-  let cooldown=false, ydBlock=false, ydUsers=new Set(), selfCount=0;
-
-  client.on("connected", async ()=>{
-    try{
-      await Promise.all([
-        client.join("yamatosdeath").then(()=>console.log("Joined #yamatosdeath")),
-        client.join("athernals7").then(()=>console.log("Joined #athernals7")),
-      ]);
-    }catch(e){ console.warn("Join error",e); }
-  });
-
-  client.on("message",(ch,tags,message)=>{
-    const m=message.trim();
-    const user=(tags.username||"").toLowerCase();
-
-    if(ch==="#yamatosdeath"){
-      if(m==="..."){
-        if(!ydBlock){ ydBlock=true; ydUsers=new Set(); }
-        ydUsers.add(user);
-        if(ydUsers.size>=3 && !cooldown){ trigger(); ydBlock=false; ydUsers.clear(); }
-      } else { ydBlock=false; ydUsers.clear(); }
-    }
-    if(ch==="#athernals7"){
-      if(m==="..." && user===me){
-        selfCount++;
-        if(selfCount>=3 && !cooldown){ trigger(); selfCount=0; }
-      } else if(m!=="..."){ selfCount=0; }
-    }
-  });
-
-  client.connect().catch(e=>console.error("tmi connect error",e));
-
-  function trigger(){
-    const s=new Audio("./crickets.mp3");
-    s.volume=volumeLevel;
-    s.play().catch(e=>console.error("Audio error:",e));
-    cooldown=true; setTimeout(()=>cooldown=false,10000);
-  }
-})();
 </script>
 </body>
 </html>
