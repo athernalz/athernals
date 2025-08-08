@@ -4,37 +4,41 @@
 <meta charset="utf-8">
 <meta http-equiv="Cache-Control" content="no-store, max-age=0">
 <title>Crickets – OBS</title>
+<style>.ver{position:fixed;left:8px;bottom:6px;color:#9ca3af;font-size:12px;opacity:.7}</style>
 </head>
 <body style="margin:0;background:transparent;">
+<div class="ver">v0.0.7</div>
 <script>
 const CLIENT_ID="n62lboxsur7ytj4lowidq6kdf8spuc";
 const hp=new URLSearchParams(location.hash.slice(1));
 const token=hp.get("token");
+const forceLib=hp.get("lib"); // optional: lib=cdn or lib=local
 let volumeLevel=parseFloat(localStorage.getItem("volumeLevel")||"0.65");
 
 function loadChatLib(){
-  return new Promise((resolve, reject)=>{
-    const tryLoad=(src, onFail)=>{
+  return new Promise((resolve,reject)=>{
+    const v="v="+Date.now();
+    const tryLoad=(src,next)=>{
       const s=document.createElement("script");
-      s.src=src;
-      s.onload=()=>window.tmi?resolve():onFail();
-      s.onerror=onFail;
+      s.src=src+(src.includes("?")?"&":"?")+v;
+      s.onload=()=>window.tmi?resolve():next();
+      s.onerror=next;
       document.body.appendChild(s);
     };
-    const v="v="+Date.now();
-    tryLoad("./chatlib.min.js?"+v, ()=>tryLoad("https://cdnjs.cloudflare.com/ajax/libs/tmi.js/1.8.5/tmi.min.js?"+v, ()=>reject(new Error("no chat lib"))));
+    if(forceLib==="cdn") return tryLoad("https://cdnjs.cloudflare.com/ajax/libs/tmi.js/1.8.5/tmi.min.js",()=>reject(new Error("CDN blocked")));
+    if(forceLib==="local") return tryLoad("./chatlib.min.js",()=>reject(new Error("Local lib blocked")));
+    tryLoad("./chatlib.min.js",()=>tryLoad("https://cdnjs.cloudflare.com/ajax/libs/tmi.js/1.8.5/tmi.min.js",()=>reject(new Error("Local & CDN blocked"))));
   });
 }
 
 async function getMe(tok){
-  const res=await fetch("https://api.twitch.tv/helix/users",{headers:{Authorization:`Bearer ${tok}`,"Client-Id":CLIENT_ID}});
-  const j=await res.json(); return j?.data?.[0]?.login?.toLowerCase()||null;
+  const r=await fetch("https://api.twitch.tv/helix/users",{headers:{Authorization:`Bearer ${tok}`,"Client-Id":CLIENT_ID}});
+  const j=await r.json(); return j?.data?.[0]?.login?.toLowerCase()||null;
 }
 
 (async function main(){
   if(!token){ console.error("No token in URL."); return; }
   try{ await loadChatLib(); }catch(e){ console.error("tmi load failed",e); return; }
-
   const me=await getMe(token); if(!me){ console.error("Token invalid/expired"); return; }
 
   const client=new window.tmi.Client({
@@ -54,14 +58,13 @@ async function getMe(tok){
         if(!ydBlock){ ydBlock=true; ydUsers=new Set(); }
         ydUsers.add(user);
         if(ydUsers.size>=3 && !cooldown){ trigger(); ydBlock=false; ydUsers.clear(); }
-      }else{ ydBlock=false; ydUsers.clear(); }
+      } else { ydBlock=false; ydUsers.clear(); }
     }
-
     if(ch==="#athernals7"){
       if(m==="..." && user===me){
         selfCount++;
         if(selfCount>=3 && !cooldown){ trigger(); selfCount=0; }
-      }else if(m!=="..."){ selfCount=0; }
+      } else if(m!=="..."){ selfCount=0; }
     }
   });
 
