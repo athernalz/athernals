@@ -16,7 +16,7 @@
 <body class="bg-gray-900 text-white flex items-center justify-center h-screen relative">
     <!-- Updated version tracker -->
     <div class="absolute bottom-4 left-4 text-xs text-gray-500">
-        v0.0.6
+        v0.0.7
     </div>
 
     <div class="text-center p-8 bg-gray-800 rounded-lg shadow-xl space-y-6">
@@ -35,6 +35,12 @@
             <p class="text-sm font-bold text-gray-300">Sitcom Laugh Trigger ("LOL", "LO", "KLO")</p>
             <div id="sitcom-status" class="text-2xl font-semibold">Waiting for messages...</div>
         </div>
+
+        <!-- Volume Display -->
+        <div class="text-xs text-gray-400 border-t border-gray-600 pt-4">
+            <p>Crickets Volume: <span id="cricket-vol-display" class="font-mono"></span>%</p>
+            <p>Sitcom Volume: <span id="sitcom-vol-display" class="font-mono"></span>%</p>
+        </div>
     </div>
 
     <script>
@@ -47,16 +53,36 @@
         const sitcomTriggers = ['LOL', 'LO', 'KLO'];
         // ---------------------
 
+        // --- NEW: Function to get volume from URL parameters ---
+        function getUrlParam(name, defaultValue) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const param = urlParams.get(name);
+            // Validate that the parameter is a number between 0 and 100
+            if (param && !isNaN(param) && param >= 0 && param <= 100) {
+                return parseInt(param, 10);
+            }
+            return defaultValue;
+        }
+
+        // --- NEW: Get volumes from URL or use defaults ---
+        const cricketVolume = getUrlParam('crickets', 80); // Default 100%
+        const sitcomVolume = getUrlParam('sitcom', 20);   // Default 40%
+
         const channelDisplayElement = document.getElementById('channel-display');
         const cricketsStatusElement = document.getElementById('crickets-status');
         const sitcomStatusElement = document.getElementById('sitcom-status');
+        const cricketVolDisplay = document.getElementById('cricket-vol-display');
+        const sitcomVolDisplay = document.getElementById('sitcom-vol-display');
 
         let cricketConsecutiveCount = 0;
         let sitcomConsecutiveCount = 0;
         let cricketsOnCooldown = false;
         let sitcomOnCooldown = false;
 
+        // Display initial values
         channelDisplayElement.textContent = channelNames.join(', ');
+        cricketVolDisplay.textContent = cricketVolume;
+        sitcomVolDisplay.textContent = sitcomVolume;
 
         function updateCricketsStatus() {
             if (cricketsOnCooldown) {
@@ -83,9 +109,11 @@
             const audio = new Audio(`${soundFile}.mp3`);
 
             // --- MODIFIED LOGIC ---
-            // Check if the sound is the sitcom laugh and adjust volume
-            if (soundFile === 'sitcom') {
-                audio.volume = 0.4; // 40% volume (reduced by 60%)
+            // Set volume based on the values retrieved from the URL
+            if (soundFile === 'crickets') {
+                audio.volume = cricketVolume / 100; // Convert percentage to 0.0-1.0 scale
+            } else if (soundFile === 'sitcom') {
+                audio.volume = sitcomVolume / 100; // Convert percentage to 0.0-1.0 scale
             }
 
             const playPromise = audio.play();
@@ -120,7 +148,7 @@
                 playSound('crickets');
                 cricketsOnCooldown = true;
                 cricketConsecutiveCount = 0;
-                updateCricketsStatus(); // Update UI immediately
+                updateCricketsStatus();
                 setTimeout(() => {
                     cricketsOnCooldown = false;
                     updateCricketsStatus();
@@ -132,7 +160,7 @@
                 playSound('sitcom');
                 sitcomOnCooldown = true;
                 sitcomConsecutiveCount = 0;
-                updateSitcomStatus(); // Update UI immediately
+                updateSitcomStatus();
                 setTimeout(() => {
                     sitcomOnCooldown = false;
                     updateSitcomStatus();
