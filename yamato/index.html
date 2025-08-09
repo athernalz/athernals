@@ -16,85 +16,127 @@
 <body class="bg-gray-900 text-white flex items-center justify-center h-screen relative">
     <!-- Updated version tracker -->
     <div class="absolute bottom-4 left-4 text-xs text-gray-500">
-        v0.0.4
+        v0.0.5
     </div>
 
-    <div class="text-center p-8 bg-gray-800 rounded-lg shadow-xl">
-        <!-- Modified to show multiple channels -->
-        <p class="text-lg text-gray-400 mb-2">Listening to channels: <span id="channel-display" class="font-mono text-green-400"></span></p>
-        <div id="status" class="text-2xl font-semibold p-4 rounded-md bg-gray-700">
-            Waiting for messages...
+    <div class="text-center p-8 bg-gray-800 rounded-lg shadow-xl space-y-6">
+        <div>
+            <p class="text-lg text-gray-400 mb-2">Listening to channels: <span id="channel-display" class="font-mono text-green-400"></span></p>
         </div>
-        <audio id="cricketSound" src="crickets.mp3" preload="auto"></audio>
+        
+        <!-- Crickets Status -->
+        <div class="bg-gray-700 p-4 rounded-md">
+            <p class="text-sm font-bold text-gray-300">Crickets Trigger ("...")</p>
+            <div id="crickets-status" class="text-2xl font-semibold">Waiting for messages...</div>
+        </div>
+
+        <!-- Sitcom Laugh Status -->
+        <div class="bg-gray-700 p-4 rounded-md">
+            <p class="text-sm font-bold text-gray-300">Sitcom Laugh Trigger ("LOL", "LO", "KLO")</p>
+            <div id="sitcom-status" class="text-2xl font-semibold">Waiting for messages...</div>
+        </div>
     </div>
 
     <script>
         // --- Configuration ---
-        // Added athernals7 to the list of channels
         const channelNames = ['yamatosdeath', 'athernals7'];
-        const triggerMessage = '...';
         const triggerCount = 3;
+        const cooldownDuration = 10000; // 10 seconds in milliseconds
+
+        const cricketTrigger = '...';
+        const sitcomTriggers = ['LOL', 'LO', 'KLO'];
         // ---------------------
 
-        const statusElement = document.getElementById('status');
         const channelDisplayElement = document.getElementById('channel-display');
-        let consecutiveCount = 0;
+        const cricketsStatusElement = document.getElementById('crickets-status');
+        const sitcomStatusElement = document.getElementById('sitcom-status');
 
-        // Update the channel display on the page
+        let cricketConsecutiveCount = 0;
+        let sitcomConsecutiveCount = 0;
+        let cricketsOnCooldown = false;
+        let sitcomOnCooldown = false;
+
         channelDisplayElement.textContent = channelNames.join(', ');
 
-        function updateStatus() {
-            statusElement.textContent = `Consecutive "..." count: ${consecutiveCount} / ${triggerCount}`;
-        }
-
-        function playSound() {
-            console.log('Attempting to play sound.');
-            const audio = new Audio('crickets.mp3');
-            const playPromise = audio.play();
-
-            if (playPromise !== undefined) {
-                playPromise.catch(error => {
-                    console.error("Audio playback failed:", error);
-                });
+        function updateCricketsStatus() {
+            if (cricketsOnCooldown) {
+                cricketsStatusElement.textContent = 'On Cooldown...';
+                cricketsStatusElement.classList.add('text-yellow-400');
+            } else {
+                cricketsStatusElement.textContent = `Count: ${cricketConsecutiveCount} / ${triggerCount}`;
+                cricketsStatusElement.classList.remove('text-yellow-400');
             }
         }
 
-        // Create a new TMI client and pass the array of channels
-        const client = new tmi.Client({
-            channels: channelNames
-        });
+        function updateSitcomStatus() {
+            if (sitcomOnCooldown) {
+                sitcomStatusElement.textContent = 'On Cooldown...';
+                sitcomStatusElement.classList.add('text-yellow-400');
+            } else {
+                sitcomStatusElement.textContent = `Count: ${sitcomConsecutiveCount} / ${triggerCount}`;
+                sitcomStatusElement.classList.remove('text-yellow-400');
+            }
+        }
 
-        // Connect to Twitch IRC
+        function playSound(soundFile) {
+            console.log(`Attempting to play sound: ${soundFile}`);
+            const audio = new Audio(`${soundFile}.mp3`);
+            const playPromise = audio.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => console.error(`Audio playback failed for ${soundFile}:`, error));
+            }
+        }
+
+        const client = new tmi.Client({ channels: channelNames });
         client.connect().catch(console.error);
 
-        // Listen for messages
         client.on('message', (channel, tags, message, self) => {
             if (self) return;
 
             const trimmedMessage = message.trim();
+            const upperCaseMessage = trimmedMessage.toUpperCase();
 
-            if (trimmedMessage.startsWith(triggerMessage)) {
-                consecutiveCount++;
-                console.log(`Trigger message detected in ${channel}. Count is now ${consecutiveCount}`);
+            if (trimmedMessage.startsWith(cricketTrigger)) {
+                cricketConsecutiveCount++;
+                sitcomConsecutiveCount = 0; // Reset other counter
+            } else if (sitcomTriggers.includes(upperCaseMessage)) {
+                sitcomConsecutiveCount++;
+                cricketConsecutiveCount = 0; // Reset other counter
             } else {
-                if (consecutiveCount > 0) {
-                    console.log(`Message "${trimmedMessage}" received in ${channel}. Resetting count.`);
-                }
-                consecutiveCount = 0;
+                // Reset both if message is not a trigger
+                cricketConsecutiveCount = 0;
+                sitcomConsecutiveCount = 0;
             }
 
-            updateStatus();
-
-            if (consecutiveCount >= triggerCount) {
-                console.log('Trigger count reached! Playing sound.');
-                playSound();
-                consecutiveCount = 0;
-                updateStatus();
+            // Check for Cricket trigger activation
+            if (cricketConsecutiveCount >= triggerCount && !cricketsOnCooldown) {
+                playSound('crickets');
+                cricketsOnCooldown = true;
+                cricketConsecutiveCount = 0;
+                setTimeout(() => {
+                    cricketsOnCooldown = false;
+                    updateCricketsStatus();
+                }, cooldownDuration);
             }
+
+            // Check for Sitcom trigger activation
+            if (sitcomConsecutiveCount >= triggerCount && !sitcomOnCooldown) {
+                playSound('sitcom');
+                sitcomOnCooldown = true;
+                sitcomConsecutiveCount = 0;
+                setTimeout(() => {
+                    sitcomOnCooldown = false;
+                    updateSitcomStatus();
+                }, cooldownDuration);
+            }
+
+            updateCricketsStatus();
+            updateSitcomStatus();
         });
         
-        updateStatus();
-
+        // Initial UI update
+        updateCricketsStatus();
+        updateSitcomStatus();
     </script>
 </body>
 </html>
