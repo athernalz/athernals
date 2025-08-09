@@ -16,7 +16,7 @@
 <body class="bg-gray-900 text-white flex items-center justify-center h-screen relative">
     <!-- Updated version tracker -->
     <div class="absolute bottom-4 left-4 text-xs text-gray-500">
-        v0.0.8
+        v0.0.9
     </div>
 
     <div class="text-center p-8 bg-gray-800 rounded-lg shadow-xl space-y-6">
@@ -101,7 +101,7 @@
         }
 
         function playSound(soundFile) {
-            console.log(`Attempting to play sound: ${soundFile}`);
+            console.log(`[SFX] Playing sound: ${soundFile}`);
             const audio = new Audio(`${soundFile}.mp3`);
 
             if (soundFile === 'crickets') {
@@ -112,7 +112,7 @@
 
             const playPromise = audio.play();
             if (playPromise !== undefined) {
-                playPromise.catch(error => console.error(`Audio playback failed for ${soundFile}:`, error));
+                playPromise.catch(error => console.error(`[SFX] Audio playback failed for ${soundFile}:`, error));
             }
         }
 
@@ -126,25 +126,32 @@
             const upperCaseMessage = trimmedMessage.toUpperCase();
 
             // --- REVISED LOGIC ---
-            // Determine if the message is one of our triggers
+            // The logic here is designed to be sequential.
+            // If a message is a sitcom trigger (LOL, LO, KLO), the sitcom counter goes up by one,
+            // and the cricket counter is reset because the streak of "..." is broken.
+            // If a message is a cricket trigger ("..."), the cricket counter goes up,
+            // and the sitcom counter is reset because the streak of laughs is broken.
+            // If the message is anything else, both streaks are broken and both counters reset.
+            // This ensures that only consecutive messages of the same type are counted.
             const isCricketTrigger = trimmedMessage.startsWith(cricketTrigger);
             const isSitcomTrigger = sitcomTriggers.includes(upperCaseMessage);
 
+            // Added detailed logging to help debug if other chat messages are interfering.
+            console.log(`[SFX] Message in #${channel} from ${tags['display-name']}: "${message}"`);
+            console.log(`[SFX] Counts Before: Crickets=${cricketConsecutiveCount}, Sitcom=${sitcomConsecutiveCount}`);
+
             if (isCricketTrigger) {
-                // It's a cricket trigger, so increment the cricket counter
-                // and reset the sitcom counter.
                 cricketConsecutiveCount++;
                 sitcomConsecutiveCount = 0; 
             } else if (isSitcomTrigger) {
-                // It's a sitcom trigger (any of them), so increment the single
-                // sitcom counter and reset the cricket counter.
                 sitcomConsecutiveCount++;
                 cricketConsecutiveCount = 0; 
             } else {
-                // It's neither trigger, so reset both counters.
                 cricketConsecutiveCount = 0;
                 sitcomConsecutiveCount = 0;
             }
+            
+            console.log(`[SFX] Counts After: Crickets=${cricketConsecutiveCount}, Sitcom=${sitcomConsecutiveCount}`);
 
             // Check for Cricket trigger activation
             if (cricketConsecutiveCount >= triggerCount && !cricketsOnCooldown) {
