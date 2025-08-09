@@ -16,7 +16,7 @@
 <body class="bg-gray-900 text-white flex items-center justify-center h-screen relative">
     <!-- Updated version tracker -->
     <div class="absolute bottom-4 left-4 text-xs text-gray-500">
-        v0.0.5
+        v0.0.6
     </div>
 
     <div class="text-center p-8 bg-gray-800 rounded-lg shadow-xl space-y-6">
@@ -81,6 +81,13 @@
         function playSound(soundFile) {
             console.log(`Attempting to play sound: ${soundFile}`);
             const audio = new Audio(`${soundFile}.mp3`);
+
+            // --- MODIFIED LOGIC ---
+            // Check if the sound is the sitcom laugh and adjust volume
+            if (soundFile === 'sitcom') {
+                audio.volume = 0.4; // 40% volume (reduced by 60%)
+            }
+
             const playPromise = audio.play();
             if (playPromise !== undefined) {
                 playPromise.catch(error => console.error(`Audio playback failed for ${soundFile}:`, error));
@@ -113,6 +120,7 @@
                 playSound('crickets');
                 cricketsOnCooldown = true;
                 cricketConsecutiveCount = 0;
+                updateCricketsStatus(); // Update UI immediately
                 setTimeout(() => {
                     cricketsOnCooldown = false;
                     updateCricketsStatus();
@@ -124,6 +132,7 @@
                 playSound('sitcom');
                 sitcomOnCooldown = true;
                 sitcomConsecutiveCount = 0;
+                updateSitcomStatus(); // Update UI immediately
                 setTimeout(() => {
                     sitcomOnCooldown = false;
                     updateSitcomStatus();
