@@ -16,7 +16,7 @@
 <body class="bg-gray-900 text-white flex items-center justify-center h-screen relative">
     <!-- Updated version tracker -->
     <div class="absolute bottom-4 left-4 text-xs text-gray-500">
-        v0.0.9
+        v0.1.0
     </div>
 
     <div class="text-center p-8 bg-gray-800 rounded-lg shadow-xl space-y-6">
@@ -125,18 +125,11 @@
             const trimmedMessage = message.trim();
             const upperCaseMessage = trimmedMessage.toUpperCase();
 
-            // --- REVISED LOGIC ---
-            // The logic here is designed to be sequential.
-            // If a message is a sitcom trigger (LOL, LO, KLO), the sitcom counter goes up by one,
-            // and the cricket counter is reset because the streak of "..." is broken.
-            // If a message is a cricket trigger ("..."), the cricket counter goes up,
-            // and the sitcom counter is reset because the streak of laughs is broken.
-            // If the message is anything else, both streaks are broken and both counters reset.
-            // This ensures that only consecutive messages of the same type are counted.
+            // --- CORRECTED LOGIC ---
             const isCricketTrigger = trimmedMessage.startsWith(cricketTrigger);
-            const isSitcomTrigger = sitcomTriggers.includes(upperCaseMessage);
+            // Check if the message STARTS WITH any of the sitcom triggers.
+            const isSitcomTrigger = sitcomTriggers.some(trigger => upperCaseMessage.startsWith(trigger));
 
-            // Added detailed logging to help debug if other chat messages are interfering.
             console.log(`[SFX] Message in #${channel} from ${tags['display-name']}: "${message}"`);
             console.log(`[SFX] Counts Before: Crickets=${cricketConsecutiveCount}, Sitcom=${sitcomConsecutiveCount}`);
 
