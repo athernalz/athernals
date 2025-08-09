@@ -16,7 +16,7 @@
 <body class="bg-gray-900 text-white flex items-center justify-center h-screen relative">
     <!-- Updated version tracker -->
     <div class="absolute bottom-4 left-4 text-xs text-gray-500">
-        v0.0.7
+        v0.0.8
     </div>
 
     <div class="text-center p-8 bg-gray-800 rounded-lg shadow-xl space-y-6">
@@ -53,20 +53,17 @@
         const sitcomTriggers = ['LOL', 'LO', 'KLO'];
         // ---------------------
 
-        // --- NEW: Function to get volume from URL parameters ---
         function getUrlParam(name, defaultValue) {
             const urlParams = new URLSearchParams(window.location.search);
             const param = urlParams.get(name);
-            // Validate that the parameter is a number between 0 and 100
             if (param && !isNaN(param) && param >= 0 && param <= 100) {
                 return parseInt(param, 10);
             }
             return defaultValue;
         }
 
-        // --- NEW: Get volumes from URL or use defaults ---
-        const cricketVolume = getUrlParam('crickets', 80); // Default 100%
-        const sitcomVolume = getUrlParam('sitcom', 20);   // Default 40%
+        const cricketVolume = getUrlParam('crickets', 100);
+        const sitcomVolume = getUrlParam('sitcom', 40);
 
         const channelDisplayElement = document.getElementById('channel-display');
         const cricketsStatusElement = document.getElementById('crickets-status');
@@ -79,7 +76,6 @@
         let cricketsOnCooldown = false;
         let sitcomOnCooldown = false;
 
-        // Display initial values
         channelDisplayElement.textContent = channelNames.join(', ');
         cricketVolDisplay.textContent = cricketVolume;
         sitcomVolDisplay.textContent = sitcomVolume;
@@ -108,12 +104,10 @@
             console.log(`Attempting to play sound: ${soundFile}`);
             const audio = new Audio(`${soundFile}.mp3`);
 
-            // --- MODIFIED LOGIC ---
-            // Set volume based on the values retrieved from the URL
             if (soundFile === 'crickets') {
-                audio.volume = cricketVolume / 100; // Convert percentage to 0.0-1.0 scale
+                audio.volume = cricketVolume / 100;
             } else if (soundFile === 'sitcom') {
-                audio.volume = sitcomVolume / 100; // Convert percentage to 0.0-1.0 scale
+                audio.volume = sitcomVolume / 100;
             }
 
             const playPromise = audio.play();
@@ -131,14 +125,23 @@
             const trimmedMessage = message.trim();
             const upperCaseMessage = trimmedMessage.toUpperCase();
 
-            if (trimmedMessage.startsWith(cricketTrigger)) {
+            // --- REVISED LOGIC ---
+            // Determine if the message is one of our triggers
+            const isCricketTrigger = trimmedMessage.startsWith(cricketTrigger);
+            const isSitcomTrigger = sitcomTriggers.includes(upperCaseMessage);
+
+            if (isCricketTrigger) {
+                // It's a cricket trigger, so increment the cricket counter
+                // and reset the sitcom counter.
                 cricketConsecutiveCount++;
-                sitcomConsecutiveCount = 0; // Reset other counter
-            } else if (sitcomTriggers.includes(upperCaseMessage)) {
+                sitcomConsecutiveCount = 0; 
+            } else if (isSitcomTrigger) {
+                // It's a sitcom trigger (any of them), so increment the single
+                // sitcom counter and reset the cricket counter.
                 sitcomConsecutiveCount++;
-                cricketConsecutiveCount = 0; // Reset other counter
+                cricketConsecutiveCount = 0; 
             } else {
-                // Reset both if message is not a trigger
+                // It's neither trigger, so reset both counters.
                 cricketConsecutiveCount = 0;
                 sitcomConsecutiveCount = 0;
             }
