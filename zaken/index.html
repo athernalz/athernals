@@ -119,18 +119,6 @@
             { name: 'MrA', characters: [{ name: 'MrA', class: 'Recharger' }, { name: 'Humax', class: 'COV' }, { name: 'iHumax', class: 'DD' }, { name: 'Xamuh', class: 'DD', shareGroup: 'A' }, { name: 'iKiku', class: 'FI' }] },
             { name: 'Galena', characters: [{ name: 'Vayek', class: 'JUDI' }, { name: 'BlackKarou', class: 'DOD' }, { name: 'Galena', class: 'Bishop' }] },
         ];
-
-        const partySlots = [
-            { role: 'Bishop', icon: 'BP' },
-            { role: 'Recharger', icon: 'EE' },
-            { role: 'COV', icon: 'PP' },
-            { role: 'BD', icon: 'BD' },
-            { role: 'SWS', icon: 'SWS' },
-            { role: 'FI', icon: 'FI' },
-            { role: 'DD', icon: 'DD' },
-            { role: 'DD', icon: 'DD' },
-            { role: 'DD', icon: 'DD' },
-        ];
         
         const optionalRoles = ['DOD', 'JUDI'];
 
@@ -193,25 +181,36 @@
                     maxCw: Math.ceil(cwPool.length / 2),
                     maxStrongDDs: Math.ceil(strongDdPool.length / 2)
                 };
+
+                const supportRoles = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS'];
+                const criticalProviders = new Map();
+                for (const role of supportRoles) {
+                    const providers = [...new Set(allAvailableChars.filter(c => c.class === role).map(c => c.player))];
+                    if (providers.length <= 2 && providers.length > 0) { 
+                        providers.forEach(p => {
+                            if (!criticalProviders.has(p)) criticalProviders.set(p, []);
+                            criticalProviders.get(p).push(role);
+                        });
+                    }
+                }
                 
-                run1 = findParty(allAvailableChars, selectedPlayerNames, run1Limits, false);
+                run1 = findParty(allAvailableChars, selectedPlayerNames, run1Limits, false, criticalProviders);
                 
                 const usedCharNamesRun1 = Object.values(run1.party).map(p => p.char.name);
                 const remainingChars = allAvailableChars.filter(char => !usedCharNamesRun1.includes(char.name));
                 
-                run2 = findParty(remainingChars, selectedPlayerNames, {}, true);
+                run2 = findParty(remainingChars, selectedPlayerNames, {}, true, new Map());
             } else {
-                run1 = findParty(allAvailableChars, selectedPlayerNames, {}, true);
+                run1 = findParty(allAvailableChars, selectedPlayerNames, {}, true, new Map());
             }
             
             renderResults(run1, run2);
         }
         
-        function findParty(characterPool, availablePlayerNames, limits = {}, isGreedy = true) {
+        function findParty(characterPool, availablePlayerNames, limits = {}, isGreedy = true, criticalProviders = new Map()) {
             const party = {};
             const assignedPlayers = new Set();
             const assignedChars = new Set();
-            let slotsToFill = partySlots.map(s => s.role);
             
             let cwCount = 0;
             let strongDdCount = 0;
@@ -233,56 +232,59 @@
                 assignedChars.add(char.name);
                 if (char.special === 'CW') cwCount++;
                 if (char.strength === 'high') strongDdCount++;
-                const roleIndex = slotsToFill.indexOf(role);
-                if (roleIndex > -1) slotsToFill.splice(roleIndex, 1);
             };
 
-            // Logic passes (1-7)
-            for (const role of [...partySlots.map(s => s.role)]) {
-                 if (!slotsToFill.includes(role)) continue;
-                 const candidate = characterPool.find(c => c.class === role && c.isMain && canAssign(c, party));
+            const supportRoles = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS'];
+            
+            // Pass 1: Fill required support roles (mains first)
+            for (const role of supportRoles) {
+                 let candidate = characterPool.find(c => c.class === role && c.isMain && canAssign(c, party));
                  if (candidate) assign(role, candidate);
             }
-
-            const criticalRoles = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS', 'FI'];
-            for (const role of criticalRoles) {
-                if (!slotsToFill.includes(role)) continue;
-                const candidates = characterPool.filter(c => c.class === role && canAssign(c, party));
-                const uniqueProviders = [...new Set(candidates.map(c => c.player))];
-                if (uniqueProviders.length === 1) {
-                    const charToAssign = candidates.find(c => c.player === uniqueProviders[0]);
-                    if(charToAssign) assign(role, charToAssign);
-                }
-            }
-            
-            if (slotsToFill.includes('Bishop')) {
-                const bishopCandidates = characterPool.filter(c => c.class === 'Bishop' && canAssign(c, party));
-                const uniqueBishopPlayers = [...new Set(bishopCandidates.map(c => c.player))];
-                if (uniqueBishopPlayers.length === 1 && uniqueBishopPlayers[0] === 'Galena') {
-                    const galenaBishop = bishopCandidates.find(c => c.player === 'Galena');
-                    if (galenaBishop) assign('Bishop', galenaBishop);
-                }
-            }
-
-            if (slotsToFill.includes('DD')) {
-                const cwCandidate = characterPool.find(c => c.special === 'CW' && canAssign(c, party));
-                if (cwCandidate) assign('DD', cwCandidate);
-            }
-
-            for (const role of [...slotsToFill]) {
-                const candidate = characterPool.find(c => c.class === role && canAssign(c, party));
+            // Fill remaining supports (any character)
+            for (const role of supportRoles) {
+                if(Object.values(party).some(p => p.role === role)) continue;
+                let candidate = characterPool.find(c => c.class === role && canAssign(c, party));
                 if (candidate) assign(role, candidate);
             }
 
+            // Pass 2: Fill 4 damage dealer slots
+            let damageSlotsToFill = 4;
+
+            // Sub-pass 2a: Try to get an FI
+            if (damageSlotsToFill > 0) {
+                const fiCandidates = characterPool.filter(c => c.class === 'FI' && canAssign(c, party));
+                fiCandidates.sort((a,b) => (criticalProviders.has(a.player) ? 1 : 0) - (criticalProviders.has(b.player) ? 1 : 0));
+                if (fiCandidates.length > 0) {
+                    assign('FI', fiCandidates[0]);
+                    damageSlotsToFill--;
+                }
+            }
+
+            // Sub-pass 2b: Fill remaining slots with DDs
+            const ddCandidates = characterPool.filter(c => c.class === 'DD' && canAssign(c, party));
+            ddCandidates.sort((a, b) => {
+                const aIsCritical = criticalProviders.has(a.player);
+                const bIsCritical = criticalProviders.has(b.player);
+                const aHasCW = a.special === 'CW';
+                const bHasCW = b.special === 'CW';
+                if (aIsCritical !== bIsCritical) return aIsCritical ? 1 : -1;
+                if (aHasCW !== bHasCW) return aHasCW ? -1 : 1;
+                return 0;
+            });
+
+            for (let i = 0; i < damageSlotsToFill; i++) {
+                if (ddCandidates.length > 0) assign('DD', ddCandidates.shift());
+            }
+            
+            // Pass 3: Greedy optional members
             if (isGreedy) {
                 if (Object.keys(party).length >= 9) {
                      let optionalCandidate = null;
-                     const isBishopFilled = Object.values(party).some(p=>p.role === 'Bishop');
-                     const isFiFilled = Object.values(party).some(p=>p.role === 'FI');
-                     if (isBishopFilled) {
+                     if (Object.values(party).some(p=>p.role === 'Bishop')) {
                         optionalCandidate = characterPool.find(c => c.player === 'Galena' && optionalRoles.includes(c.class) && canAssign(c, party));
                      }
-                     if (!optionalCandidate && isFiFilled) {
+                     if (!optionalCandidate && Object.values(party).some(p=>p.role === 'FI')) {
                         optionalCandidate = characterPool.find(c => c.player === 'Pap1ll0n' && optionalRoles.includes(c.class) && canAssign(c, party));
                      }
                      if (!optionalCandidate) {
@@ -296,18 +298,21 @@
                 }
             }
             
-            const requiredCounts = partySlots.reduce((acc, slot) => ({...acc, [slot.role]: (acc[slot.role] || 0) + 1 }), {});
-            const filledCounts = Object.values(party).reduce((acc, p) => ({...acc, [p.role]: (acc[p.role] || 0) + 1 }), {});
-            let finalSuccess = true, missingRoles = [];
-            for (const role in requiredCounts) {
-                if ((filledCounts[role] || 0) < requiredCounts[role]) {
-                    finalSuccess = false;
-                    for (let i = 0; i < requiredCounts[role] - (filledCounts[role] || 0); i++) missingRoles.push(role);
-                }
+            const filledSupports = Object.values(party).filter(p => supportRoles.includes(p.role));
+            const filledDamage = Object.values(party).filter(p => ['DD', 'FI'].includes(p.role));
+            const success = filledSupports.length === supportRoles.length && filledDamage.length >= 4;
+            let missingRoles = [];
+
+            if (!success) {
+                supportRoles.forEach(role => {
+                    if (!filledSupports.some(p => p.role === role)) missingRoles.push(role);
+                });
+                const neededDDs = 4 - filledDamage.length;
+                for (let i = 0; i < neededDDs; i++) missingRoles.push('DD/FI');
             }
             
             const freePlayers = availablePlayerNames.filter(name => !assignedPlayers.has(name));
-            return { party, success: finalSuccess, missingRoles, freePlayers };
+            return { party, success, missingRoles, freePlayers };
         }
         
         function renderResults(run1, run2) {
