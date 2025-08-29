@@ -112,7 +112,7 @@
             { name: 'IWillClapYou', characters: [{ name: 'IWillClapYou', class: 'Recharger' }, { name: 'IWontHitYou', class: 'DD' }, { name: 'MaDRabbit', class: 'DD', special: 'CW' }] },
             { name: 'MaDRabbit', characters: [{ name: 'MaDRabbit', class: 'DD', special: 'CW' }, { name: 'Romeow', class: 'COV' }] },
             { name: 'Pap1ll0n', characters: [{ name: 'Pap1ll0n', class: 'FI' }, { name: 'Vayek', class: 'JUDI' }, { name: 'Dreamhack', class: 'DD' }, { name: 'BlackKarou', class: 'DOD' }] },
-            { name: 'Thalik', characters: [{ name: 'Thalik', class: 'DD', special: 'CW' }, { name: 'IWontHitYou', class: 'DD' }] },
+            { name: 'Thalik', characters: [{ name: 'Thalik', class: 'DD', special: 'CW' }, { name: 'IWontHitYou', class: 'DD' }, { name: 'Romeow', class: 'COV' }] },
             { name: 'Zerathell', characters: [{ name: 'Zerathell', class: 'BD' }, { name: 'MyDance', class: 'BD' }] },
             { name: 'Dreamhack', characters: [{ name: 'Dreamhack', class: 'DD' }, { name: 'Vayek', class: 'JUDI' }, { name: 'BlackKarou', class: 'DOD' }] },
             { name: 'Humax', characters: [{ name: 'iHumax', class: 'DD' }, { name: 'Xamuh', class: 'DD' }] },
@@ -186,10 +186,15 @@
 
             const allAvailableChars = selectedPlayerNames.flatMap(name => {
                 const player = playerData.find(p => p.name === name);
-                return player.characters.map(char => ({
-                    player: player.name,
-                    ...char
-                }));
+                return player.characters.map(char => {
+                    const isHumaxMain = player.name === 'Humax' && char.name === 'iHumax';
+                    const isStandardMain = player.name.toLowerCase() === char.name.toLowerCase();
+                    return {
+                        player: player.name,
+                        isMain: isHumaxMain || isStandardMain,
+                        ...char
+                    }
+                });
             });
 
             const run1 = findParty(allAvailableChars, selectedPlayerNames);
@@ -197,201 +202,166 @@
             let run2 = null;
             if (numRuns === 2) {
                 const usedCharNamesRun1 = Object.values(run1.party).map(p => p.char.name);
-                
                 const remainingChars = allAvailableChars.filter(char => !usedCharNamesRun1.includes(char.name));
-                // For run 2, all selected players are potentially available again
                 run2 = findParty(remainingChars, selectedPlayerNames);
             }
             
             renderResults(run1, run2);
         }
         
-        // This function attempts to find a valid party composition from a pool of characters
         function findParty(characterPool, availablePlayerNames) {
             const party = {};
             const assignedPlayers = new Set();
             const assignedChars = new Set();
+            let slotsToFill = partySlots.map(s => s.role);
 
-            let pool = [...characterPool];
-            let slotsToFill = [...partySlots.map(s => s.role)];
-
-            // Helper to assign a character
             const assign = (role, char) => {
-                const slotIndex = Object.keys(party).length;
-                party[slotIndex] = { role, char };
+                party[Object.keys(party).length] = { role, char };
                 assignedPlayers.add(char.player);
                 assignedChars.add(char.name);
                 const roleIndex = slotsToFill.indexOf(role);
-                if (roleIndex > -1) {
-                    slotsToFill.splice(roleIndex, 1);
-                }
+                if (roleIndex > -1) slotsToFill.splice(roleIndex, 1);
             };
-            
-            // Pass 1: Handle unique providers for critical roles
+
+            // Pass 1: Prioritize mains for required slots
+            for (const role of [...slotsToFill]) {
+                const candidate = characterPool.find(c => 
+                    c.class === role && c.isMain && !assignedPlayers.has(c.player) && !assignedChars.has(c.name)
+                );
+                if (candidate) assign(role, candidate);
+            }
+
+            // Pass 2: Handle unique providers for remaining critical roles
             const criticalRoles = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS', 'FI'];
             for (const role of criticalRoles) {
-                const candidates = pool.filter(c => c.class === role && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
+                if (!slotsToFill.includes(role)) continue;
+                const candidates = characterPool.filter(c => c.class === role && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
                 const uniqueProviders = [...new Set(candidates.map(c => c.player))];
                 if (uniqueProviders.length === 1) {
-                    const playerToAssign = uniqueProviders[0];
-                    const charToAssign = candidates.find(c => c.player === playerToAssign);
-                    assign(role, charToAssign);
+                    const charToAssign = candidates.find(c => c.player === uniqueProviders[0]);
+                    if(charToAssign) assign(role, charToAssign);
                 }
             }
             
-            // Pass 2: Try to get a CW dagger
-            const cwCandidate = pool.find(c => c.special === 'CW' && slotsToFill.includes('DD') && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
-            if (cwCandidate) {
-                assign('DD', cwCandidate);
-            }
-            
-            // Pass 3: Fill remaining required slots
-            for (const role of slotsToFill.slice()) { // Use slice to copy, as we modify original
-                const candidate = pool.find(c => c.class === role && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
-                if (candidate) {
-                    assign(role, candidate);
+            // Pass 3: Galena Bishop check - if bishop is unfilled and she is the only one who can do it
+            if (slotsToFill.includes('Bishop')) {
+                const bishopCandidates = characterPool.filter(c => c.class === 'Bishop' && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
+                const uniqueBishopPlayers = [...new Set(bishopCandidates.map(c => c.player))];
+                if (uniqueBishopPlayers.length === 1 && uniqueBishopPlayers[0] === 'Galena') {
+                    const galenaBishop = bishopCandidates.find(c => c.player === 'Galena');
+                    if (galenaBishop) assign('Bishop', galenaBishop);
                 }
             }
-            
-            // Pass 4: 10th member (JUDI/DOD) with prioritization
+
+            // Pass 4: Try to get a CW dagger
+            if (slotsToFill.includes('DD')) {
+                const cwCandidate = characterPool.find(c => c.special === 'CW' && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
+                if (cwCandidate) assign('DD', cwCandidate);
+            }
+
+            // Pass 5: Fill remaining required slots
+            for (const role of [...slotsToFill]) {
+                const candidate = characterPool.find(c => c.class === role && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
+                if (candidate) assign(role, candidate);
+            }
+
+            // Pass 6: 10th member (JUDI/DOD) with prioritization
             if (Object.keys(party).length >= 9) {
                  let optionalCandidate = null;
-                 const isBishopFilled = Object.values(party).some(p => p.role === 'Bishop');
-                 const isFiFilled = Object.values(party).some(p => p.role === 'FI');
-                 
-                 // Prioritize Galena if Bishop is taken
-                 if(isBishopFilled) {
-                    optionalCandidate = pool.find(c => c.player === 'Galena' && optionalRoles.includes(c.class) && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
-                 }
-                 
-                 // Prioritize Pap1ll0n if FI is taken and Galena wasn't chosen
-                 if(!optionalCandidate && isFiFilled) {
-                    optionalCandidate = pool.find(c => c.player === 'Pap1ll0n' && optionalRoles.includes(c.class) && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
-                 }
+                 const isBishopFilled = !slotsToFill.includes('Bishop');
+                 const isFiFilled = !Object.values(party).some(p => p.role === 'FI');
 
-                 // If no priority candidate, find any
-                 if(!optionalCandidate) {
-                    optionalCandidate = pool.find(c => optionalRoles.includes(c.class) && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
+                 if (isBishopFilled) {
+                    optionalCandidate = characterPool.find(c => c.player === 'Galena' && optionalRoles.includes(c.class) && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
                  }
-
-                 if(optionalCandidate) {
-                    assign(optionalCandidate.class, optionalCandidate);
+                 if (!optionalCandidate && isFiFilled) {
+                    optionalCandidate = characterPool.find(c => c.player === 'Pap1ll0n' && optionalRoles.includes(c.class) && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
                  }
+                 if (!optionalCandidate) {
+                    optionalCandidate = characterPool.find(c => optionalRoles.includes(c.class) && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
+                 }
+                 if (optionalCandidate) assign(optionalCandidate.class, optionalCandidate);
             }
             
-            // Pass 5: 11th member (extra DD)
+            // Pass 7: 11th member (extra DD)
             if (Object.keys(party).length >= 10) {
-                const extraDdCandidate = pool.find(c => c.class === 'DD' && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
-                if(extraDdCandidate) {
-                    assign('DD', extraDdCandidate);
-                }
+                const extraDdCandidate = characterPool.find(c => c.class === 'DD' && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
+                if(extraDdCandidate) assign('DD', extraDdCandidate);
             }
             
-            const success = partySlots.every(slot => 
-                Object.values(party).some(p => p.role === slot.role)
-            );
+            const success = partySlots.every(slot => !slotsToFill.includes(slot.role));
 
             let missingRoles = [];
             if (!success) {
-                const requiredCounts = partySlots.reduce((acc, slot) => {
-                    acc[slot.role] = (acc[slot.role] || 0) + 1;
-                    return acc;
-                }, {});
-
-                const filledCounts = Object.values(party).reduce((acc, p) => {
-                    acc[p.role] = (acc[p.role] || 0) + 1;
-                    return acc;
-                }, {});
-
-                for (const role in requiredCounts) {
-                    const needed = requiredCounts[role];
-                    const filled = filledCounts[role] || 0;
-                    if (filled < needed) {
-                        for (let i = 0; i < needed - filled; i++) {
-                            missingRoles.push(role);
-                        }
-                    }
-                }
+                 const requiredCounts = partySlots.reduce((acc, slot) => ({...acc, [slot.role]: (acc[slot.role] || 0) + 1 }), {});
+                 const filledCounts = Object.values(party).reduce((acc, p) => ({...acc, [p.role]: (acc[p.role] || 0) + 1 }), {});
+                 for (const role in requiredCounts) {
+                    for (let i = 0; i < requiredCounts[role] - (filledCounts[role] || 0); i++) missingRoles.push(role);
+                 }
             }
             
-            const freePlayers = (availablePlayerNames || []).filter(name => !assignedPlayers.has(name));
-
+            const freePlayers = availablePlayerNames.filter(name => !assignedPlayers.has(name));
             return { party, success, missingRoles, freePlayers };
         }
         
         // --- Rendering ---
         function renderResults(run1, run2) {
             placeholder.classList.add('hidden');
-            resultsContainer.innerHTML = ''; // Clear previous results
+            resultsContainer.innerHTML = '';
             resultsContainer.appendChild(createPartyCard('Run 1', run1));
-            
-            if (run2) {
-                 resultsContainer.appendChild(createPartyCard('Run 2', run2));
-            }
+            if (run2) resultsContainer.appendChild(createPartyCard('Run 2', run2));
         }
         
         function createPartyCard(title, runData) {
             const card = document.createElement('div');
             card.className = 'card rounded-lg p-6 shadow-lg';
             
-            let content = `<h2 class="text-2xl font-bold mb-4 ${runData.success ? 'text-green-400' : 'text-red-400'}">${title} - ${runData.success ? 'Composition Found' : 'Failed to Form Party'}</h2>`;
+            card.innerHTML = `<h2 class="text-2xl font-bold mb-4 ${runData.success ? 'text-green-400' : 'text-red-400'}">${title} - ${runData.success ? 'Composition Found' : 'Failed to Form Party'}</h2>`;
             
             const grid = document.createElement('div');
             grid.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4';
 
-            // Sort party by a predefined order for consistent display
             const displayOrder = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS', 'FI', 'DD', ...optionalRoles];
-            const sortedParty = Object.values(runData.party).sort((a, b) => {
-                return displayOrder.indexOf(a.role) - displayOrder.indexOf(b.role);
-            });
+            const sortedParty = Object.values(runData.party).sort((a, b) => displayOrder.indexOf(a.role) - displayOrder.indexOf(b.role));
 
-            // Render assigned members
             sortedParty.forEach(({role, char}) => {
                 const isOptional = optionalRoles.includes(role);
                 const slotEl = document.createElement('div');
                 slotEl.className = `p-3 rounded-lg flex items-center ${isOptional ? 'bg-indigo-900/40 border border-indigo-700' : 'bg-gray-800/50'}`;
                 const playerNameLower = char.player.toLowerCase();
-                
                 slotEl.innerHTML = `
                     <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-700 flex items-center justify-center overflow-hidden">
                        <img src="pfps/${playerNameLower}.png" alt="${char.player}" class="w-full h-full object-cover" onerror="this.outerHTML='<div class=\\'w-full h-full flex items-center justify-center font-bold text-pink-400 text-sm party-slot-icon\\'>${role}</div>'">
                     </div>
                     <div class="ml-3">
-                        <p class="text-md font-semibold text-white">${char.player}</p>
+                        <p class="text-md font-semibold text-white">${char.player} ${char.isMain ? '<span class="text-xs text-yellow-400">(Main)</span>' : ''}</p>
                         <p class="text-sm text-gray-400">${char.class} (${char.name}) ${char.special === 'CW' ? '<span class="text-red-400 font-bold">(CW)</span>' : ''}</p>
-                    </div>
-                `;
+                    </div>`;
                 grid.appendChild(slotEl);
             });
             
-            // If failed, render missing roles
             if (!runData.success && runData.missingRoles.length > 0) {
                 runData.missingRoles.forEach(role => {
                     const slotEl = document.createElement('div');
                     slotEl.className = 'p-3 rounded-lg flex items-center bg-red-900/50 border border-red-700';
                     slotEl.innerHTML = `
-                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-700">
-                        </div>
+                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-700"></div>
                         <div class="ml-3">
                             <p class="text-md font-semibold text-red-300">MISSING</p>
                             <p class="text-sm text-red-400">${role}</p>
-                        </div>
-                    `;
+                        </div>`;
                     grid.appendChild(slotEl);
                 });
             }
 
-            card.innerHTML = content;
             card.appendChild(grid);
 
-            // Render Free Players
-            if (runData.freePlayers && runData.freePlayers.length > 0) {
+            if (runData.freePlayers.length > 0) {
                 const freePlayersEl = document.createElement('div');
                 freePlayersEl.className = 'mt-6 pt-4 border-t border-gray-600';
                 freePlayersEl.innerHTML = `
                     <h3 class="text-lg font-semibold text-cyan-400">Player(s) on Standby:</h3>
-                    <p class="text-gray-300">${runData.freePlayers.join(', ')}</p>
-                `;
+                    <p class="text-gray-300">${runData.freePlayers.join(', ')}</p>`;
                 card.appendChild(freePlayersEl);
             }
 
@@ -408,12 +378,10 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
                 <h3 class="mt-4 text-2xl font-bold text-red-400">${title}</h3>
-                <p class="mt-2 text-lg text-gray-300">${message}</p>
-            `;
+                <p class="mt-2 text-lg text-gray-300">${message}</p>`;
             resultsContainer.appendChild(errorCard);
         }
 
-        // --- Start the app ---
         document.addEventListener('DOMContentLoaded', initialize);
     </script>
 </body>
