@@ -184,11 +184,6 @@
 
             const run1 = findParty(allAvailableChars);
             
-            if (!run1.success) {
-                renderError("Could not form a party.", "A complete party could not be formed with the selected people for Run 1. Try a different combination.");
-                return;
-            }
-
             let run2 = null;
             if (numRuns === 2) {
                 const usedCharNames = Object.values(run1.party).map(p => p.char.name);
@@ -248,19 +243,50 @@
                 }
             }
             
-            // Pass 4: Fill optional slot if we have 10 or more people selected
-            if (getSelectedPlayers().length >= 10) {
+            // Pass 4: 10th member (JUDI/DOD)
+            if (Object.keys(party).length >= 9) {
                  const optionalCandidate = pool.find(c => optionalRoles.includes(c.class) && !assignedPlayers.has(c.player));
                  if(optionalCandidate) {
                     assign(optionalCandidate.class, optionalCandidate);
                  }
             }
             
+            // Pass 5: 11th member (extra DD)
+            if (Object.keys(party).length >= 10) {
+                const extraDdCandidate = pool.find(c => c.class === 'DD' && !assignedPlayers.has(c.player));
+                if(extraDdCandidate) {
+                    assign('DD', extraDdCandidate);
+                }
+            }
+            
             const success = partySlots.every(slot => 
                 Object.values(party).some(p => p.role === slot.role)
             );
 
-            return { party, success };
+            let missingRoles = [];
+            if (!success) {
+                const requiredCounts = partySlots.reduce((acc, slot) => {
+                    acc[slot.role] = (acc[slot.role] || 0) + 1;
+                    return acc;
+                }, {});
+
+                const filledCounts = Object.values(party).reduce((acc, p) => {
+                    acc[p.role] = (acc[p.role] || 0) + 1;
+                    return acc;
+                }, {});
+
+                for (const role in requiredCounts) {
+                    const needed = requiredCounts[role];
+                    const filled = filledCounts[role] || 0;
+                    if (filled < needed) {
+                        for (let i = 0; i < needed - filled; i++) {
+                            missingRoles.push(role);
+                        }
+                    }
+                }
+            }
+
+            return { party, success, missingRoles };
         }
         
         // --- Rendering ---
@@ -280,38 +306,54 @@
             
             let content = `<h2 class="text-2xl font-bold mb-4 ${runData.success ? 'text-green-400' : 'text-red-400'}">${title} - ${runData.success ? 'Composition Found' : 'Failed to Form Party'}</h2>`;
             
-            if (runData.success) {
-                const grid = document.createElement('div');
-                grid.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4';
+            const grid = document.createElement('div');
+            grid.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4';
 
-                // Sort party by a predefined order for consistent display
-                const displayOrder = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS', 'FI', 'DD', ...optionalRoles];
-                const sortedParty = Object.values(runData.party).sort((a, b) => {
-                    return displayOrder.indexOf(a.role) - displayOrder.indexOf(b.role);
-                });
+            // Sort party by a predefined order for consistent display
+            const displayOrder = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS', 'FI', 'DD', ...optionalRoles];
+            const sortedParty = Object.values(runData.party).sort((a, b) => {
+                return displayOrder.indexOf(a.role) - displayOrder.indexOf(b.role);
+            });
 
-                sortedParty.forEach(({role, char}) => {
-                    const isOptional = optionalRoles.includes(role);
+            // Render assigned members
+            sortedParty.forEach(({role, char}) => {
+                const isOptional = optionalRoles.includes(role);
+                const slotEl = document.createElement('div');
+                slotEl.className = `p-3 rounded-lg flex items-center ${isOptional ? 'bg-indigo-900/40 border border-indigo-700' : 'bg-gray-800/50'}`;
+                const playerNameLower = char.player.toLowerCase();
+                
+                slotEl.innerHTML = `
+                    <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-700 flex items-center justify-center overflow-hidden">
+                       <img src="pfps/${playerNameLower}.png" alt="${char.player}" class="w-full h-full object-cover" onerror="this.outerHTML='<div class=\\'w-full h-full flex items-center justify-center font-bold text-pink-400 text-sm party-slot-icon\\'>${role}</div>'">
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-md font-semibold text-white">${char.player}</p>
+                        <p class="text-sm text-gray-400">${char.class} (${char.name}) ${char.special === 'CW' ? '<span class="text-red-400 font-bold">(CW)</span>' : ''}</p>
+                    </div>
+                `;
+                grid.appendChild(slotEl);
+            });
+            
+            // If failed, render missing roles
+            if (!runData.success && runData.missingRoles.length > 0) {
+                runData.missingRoles.forEach(role => {
                     const slotEl = document.createElement('div');
-                    slotEl.className = `p-3 rounded-lg flex items-center ${isOptional ? 'bg-indigo-900/40 border border-indigo-700' : 'bg-gray-800/50'}`;
-                    const playerNameLower = char.player.toLowerCase();
-                    
+                    slotEl.className = 'p-3 rounded-lg flex items-center bg-red-900/50 border border-red-700';
                     slotEl.innerHTML = `
-                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-700 flex items-center justify-center overflow-hidden">
-                           <img src="pfps/${playerNameLower}.png" alt="${char.player}" class="w-full h-full object-cover" onerror="this.outerHTML='<div class=\\'w-full h-full flex items-center justify-center font-bold text-pink-400 text-sm party-slot-icon\\'>${role}</div>'">
+                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-700 flex items-center justify-center font-bold text-red-400 text-sm party-slot-icon">
+                            ${role}
                         </div>
                         <div class="ml-3">
-                            <p class="text-md font-semibold text-white">${char.player}</p>
-                            <p class="text-sm text-gray-400">${char.class} (${char.name}) ${char.special === 'CW' ? '<span class="text-red-400 font-bold">(CW)</span>' : ''}</p>
+                            <p class="text-md font-semibold text-red-300">MISSING</p>
+                            <p class="text-sm text-red-400">Role could not be filled.</p>
                         </div>
                     `;
                     grid.appendChild(slotEl);
                 });
-                card.innerHTML = content;
-                card.appendChild(grid);
-            } else {
-                 card.innerHTML = content + `<p class="text-gray-300">A complete party could not be formed from the remaining characters. Please try a different selection of people.</p>`;
             }
+
+            card.innerHTML = content;
+            card.appendChild(grid);
             return card;
         }
         
@@ -335,4 +377,5 @@
     </script>
 </body>
 </html>
+
 
