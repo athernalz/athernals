@@ -25,9 +25,14 @@
         .btn-primary:hover {
             background-color: #275288;
         }
-        .checkbox-custom:checked {
-            background-color: #e43f5a;
+        /* Custom style for checked player cards */
+        .player-checkbox:checked + .player-card {
             border-color: #e43f5a;
+            background-color: #1f4068;
+        }
+        .player-checkbox:checked + .player-card img {
+            ring-width: 2px;
+            ring-color: #e43f5a;
         }
         .radio-custom:checked {
             background-color: #e43f5a;
@@ -51,8 +56,8 @@
                     <!-- People Selection -->
                     <div>
                         <h2 class="text-xl font-semibold mb-3 border-b-2 border-gray-600 pb-2">1. Select Available People</h2>
-                        <div id="player-list" class="space-y-2 max-h-96 overflow-y-auto pr-2">
-                            <!-- Player checkboxes will be injected here -->
+                        <div id="player-list" class="grid grid-cols-3 gap-2 max-h-[30rem] overflow-y-auto pr-2">
+                            <!-- Player cards will be injected here -->
                         </div>
                         <p class="mt-4 text-lg font-medium">Selected People: <span id="selected-count" class="font-bold text-white">0</span></p>
                     </div>
@@ -141,10 +146,15 @@
             playerData.sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically
             playerData.forEach(player => {
                 const label = document.createElement('label');
-                label.className = 'flex items-center cursor-pointer p-2 rounded-md hover:bg-gray-700/50 transition-colors';
+                label.className = 'cursor-pointer';
+                const playerNameLower = player.name.toLowerCase();
+                
                 label.innerHTML = `
-                    <input type="checkbox" data-name="${player.name}" class="player-checkbox checkbox-custom h-5 w-5 rounded border-gray-500 text-pink-500 focus:ring-pink-400">
-                    <span class="ml-3 text-lg">${player.name}</span>
+                    <input type="checkbox" data-name="${player.name}" class="player-checkbox hidden">
+                    <div class="player-card p-2 rounded-lg border-2 border-gray-700 bg-gray-800/50 hover:bg-gray-700/70 transition-all duration-200 flex flex-col items-center text-center h-full">
+                        <img src="pfps/${playerNameLower}.png" alt="${player.name}" class="w-16 h-16 rounded-full object-cover mb-2 transition-all duration-200">
+                        <span class="text-sm font-semibold">${player.name}</span>
+                    </div>
                 `;
                 playerListContainer.appendChild(label);
             });
@@ -190,9 +200,19 @@
                 const usedPlayersRun1 = [...new Set(Object.values(run1.party).map(p => p.char.player))];
                 
                 const remainingChars = allAvailableChars.filter(char => !usedCharNamesRun1.includes(char.name));
-                const remainingPlayers = selectedPlayerNames.filter(p => !usedPlayersRun1.includes(p));
+                // For run 2, all selected players are potentially available again, minus those who only have one char that was used in run 1
+                const playersInRun1 = new Set(usedPlayersRun1);
+                const charsInRun1 = new Set(usedCharNamesRun1);
+
+                const availableForRun2 = selectedPlayerNames.filter(playerName => {
+                    // if player wasn't in run 1, they are available
+                    if (!playersInRun1.has(playerName)) return true;
+                    // if player was in run 1, check if they have any unused characters
+                    const pData = playerData.find(p => p.name === playerName);
+                    return pData.characters.some(char => !charsInRun1.has(char.name));
+                });
                 
-                run2 = findParty(remainingChars, remainingPlayers);
+                run2 = findParty(remainingChars, availableForRun2);
             }
             
             renderResults(run1, run2);
@@ -305,8 +325,8 @@
                     }
                 }
             }
-
-            const freePlayers = availablePlayerNames.filter(name => !assignedPlayers.has(name));
+            
+            const freePlayers = (availablePlayerNames || []).filter(name => !assignedPlayers.has(name));
 
             return { party, success, missingRoles, freePlayers };
         }
@@ -410,5 +430,4 @@
     </script>
 </body>
 </html>
-
 
