@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lineage 2 - Ant Queen Respawn Timer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .timer-card {
+            background-color: #1f2937; /* bg-gray-800 */
+            border: 1px solid #374151; /* border-gray-700 */
+            border-radius: 0.75rem; /* rounded-xl */
+            padding: 1.5rem; /* p-6 */
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            transition: background-color 0.2s ease-in-out;
+            cursor: pointer;
+        }
+        .btn-primary {
+            background-color: #4f46e5; /* bg-indigo-600 */
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #4338ca; /* bg-indigo-700 */
+        }
+        .btn-danger {
+            background-color: #dc2626; /* bg-red-600 */
+            color: white;
+        }
+        .btn-danger:hover {
+            background-color: #b91c1c; /* bg-red-700 */
+        }
+        .utc-time-display {
+            font-family: monospace;
+            background-color: #374151;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+        }
+        #toast {
+            position: fixed;
+            bottom: 1.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            color: white;
+            z-index: 50;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+            pointer-events: none;
+        }
+        #toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        #toast.success {
+            background-color: #16a34a; /* bg-green-600 */
+        }
+        #toast.error {
+            background-color: #dc2626; /* bg-red-600 */
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 min-h-screen flex flex-col items-center pt-8 sm:pt-16 px-4">
+
+    <div class="w-full max-w-2xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-white tracking-tight">Ant Queen Respawn Timer</h1>
+            <p class="mt-2 text-lg text-gray-400">Track the next spawn window for the Ant Queen in Lineage 2.</p>
+        </header>
+
+        <!-- Current UTC Time Display -->
+        <div class="mb-6 text-center">
+            <p class="text-gray-400">Current UTC Time: <span id="current-utc-time" class="utc-time-display font-semibold text-white"></span></p>
+        </div>
+
+        <!-- Input Form -->
+        <div class="bg-gray-800 border border-gray-700 p-6 rounded-xl shadow-lg mb-8">
+            <h2 class="text-xl font-semibold mb-4 text-white">Log a New Death Time (UTC)</h2>
+            <div class="flex flex-col sm:flex-row gap-3">
+                <input type="datetime-local" id="death-time-input" class="w-full bg-gray-700 text-white border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" step="1">
+                <button id="add-timer-btn" class="btn btn-primary w-full sm:w-auto">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+                    Add Timer
+                </button>
+            </div>
+            <p class="text-sm text-gray-500 mt-2">Enter the exact time the Ant Queen died in UTC. Your local time will be converted.</p>
+        </div>
+
+        <!-- Timers Display -->
+        <main id="timers-container" class="space-y-4">
+            <!-- Timer cards will be injected here by JavaScript -->
+        </main>
+        
+        <div id="loading-state" class="text-center py-8">
+            <p class="text-gray-500">Connecting to the server...</p>
+        </div>
+
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class=""></div>
+
+    <script type="module">
+        // --- Firebase SDK Imports ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, getDocs, query, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Firebase Configuration ---
+        // These global variables are provided by the environment.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+
+        // --- Firebase Initialization ---
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- DOM Elements ---
+        const timersContainer = document.getElementById('timers-container');
+        const addTimerBtn = document.getElementById('add-timer-btn');
+        const deathTimeInput = document.getElementById('death-time-input');
+        const loadingState = document.getElementById('loading-state');
+        const currentUtcTimeEl = document.getElementById('current-utc-time');
+        const toastEl = document.getElementById('toast');
+        
+        let userId = null;
+        let timersCount = 0;
+
+        // --- Toast Notification Logic ---
+        function showToast(message, type = 'success') {
+            toastEl.textContent = message;
+            toastEl.className = ``; // Reset classes
+            toastEl.classList.add('show', type);
+            setTimeout(() => {
+                toastEl.classList.remove('show');
+            }, 3000);
+        }
+
+        // --- Time Update Logic ---
+        function updateCurrentUtcTime() {
+            currentUtcTimeEl.textContent = new Date().toISOString().slice(11, 19);
+        }
+        setInterval(updateCurrentUtcTime, 1000);
+        updateCurrentUtcTime();
+
+        // --- Authentication ---
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                userId = user.uid;
+                console.log("Authenticated with User ID:", userId);
+                await setupRealtimeListener();
+            } else {
+                try {
+                    if (typeof __initial_auth_token !== 'undefined') {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (error) {
+                    console.error("Authentication failed:", error);
+                    showToast("Error connecting to the service.", 'error');
+                }
+            }
+        });
+
+        // --- Firestore Real-time Listener ---
+        async function setupRealtimeListener() {
+            const timersCollectionPath = `/artifacts/${appId}/public/data/ant_queen_timers`;
+            const timersCollection = collection(db, timersCollectionPath);
+            const q = query(timersCollection); // No ordering needed, will sort client-side
+
+            onSnapshot(q, (snapshot) => {
+                loadingState.style.display = 'none';
+                const timers = [];
+                snapshot.forEach(doc => {
+                    timers.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // Sort timers by creation date
+                timers.sort((a, b) => a.createdAt?.seconds - b.createdAt?.seconds);
+
+                timersCount = timers.length;
+                renderTimers(timers);
+            }, (error) => {
+                console.error("Error fetching timers:", error);
+                showToast("Failed to load timers. Please refresh.", "error");
+                loadingState.textContent = "Error loading timers.";
+            });
+        }
+
+        // --- Timer Calculation and Rendering ---
+        function renderTimers(timers) {
+            timersContainer.innerHTML = ''; // Clear existing timers
+            if (timers.length === 0) {
+                timersContainer.innerHTML = `
+                    <div class="text-center py-8 bg-gray-800 rounded-lg">
+                        <p class="text-gray-400">No active timers. Be the first to add one!</p>
+                    </div>
+                `;
+                return;
+            }
+            timers.forEach(timerData => {
+                const card = createTimerCard(timerData);
+                timersContainer.appendChild(card);
+            });
+        }
+
+        function createTimerCard(timerData) {
+            const deathTime = new Date(timerData.deathTime);
+            if (isNaN(deathTime)) {
+                console.error("Invalid date format in Firestore:", timerData.deathTime);
+                return document.createElement('div'); // Return empty div for invalid data
+            }
+
+            const respawnStart = new Date(deathTime.getTime() + 17 * 60 * 60 * 1000);
+            const respawnEnd = new Date(respawnStart.getTime() + 4 * 60 * 60 * 1000);
+            
+            const card = document.createElement('div');
+            card.className = 'timer-card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4';
+            
+            const now = new Date();
+            const timeUntilStart = respawnStart - now;
+            const timeUntilEnd = respawnEnd - now;
+            
+            let statusText = '';
+            let statusColor = 'text-gray-400';
+            let countdownText = '';
+
+            if (timeUntilEnd <= 0) {
+                statusText = 'Window Closed';
+                statusColor = 'text-red-500';
+                countdownText = 'This timer has expired.';
+            } else if (timeUntilStart <= 0) {
+                statusText = 'Window OPEN';
+                statusColor = 'text-green-400 animate-pulse';
+                countdownText = `Closes in: ${formatDuration(timeUntilEnd)}`;
+            } else {
+                statusText = 'Window Opens Soon';
+                statusColor = 'text-yellow-400';
+                countdownText = `Opens in: ${formatDuration(timeUntilStart)}`;
+            }
+            
+            const formatOptions = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short' };
+            
+            card.innerHTML = `
+                <div class="flex-grow">
+                    <div class="flex items-center gap-3 mb-2">
+                        <h3 class="text-lg font-bold ${statusColor}">${statusText}</h3>
+                    </div>
+                    <p class="text-2xl font-semibold text-white mb-3">${countdownText}</p>
+                    <div class="text-sm text-gray-400 space-y-1">
+                        <p><strong>Death Time (UTC):</strong> ${deathTime.toLocaleString('en-GB', { ...formatOptions, timeZone: 'UTC' })}</p>
+                        <p><strong>Window (UTC):</strong> ${respawnStart.toLocaleString('en-GB', { ...formatOptions, timeZone: 'UTC' })} - ${respawnEnd.toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short', timeZone: 'UTC' })}</p>
+                    </div>
+                </div>
+                <button data-id="${timerData.id}" class="btn btn-danger delete-btn mt-4 sm:mt-0 self-start sm:self-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                    Delete
+                </button>
+            `;
+
+            // Start countdown interval
+            const intervalId = setInterval(() => {
+                const now = new Date();
+                const newTimeUntilStart = respawnStart - now;
+                const newTimeUntilEnd = respawnEnd - now;
+                let newCountdownText = '';
+                
+                if (newTimeUntilEnd <= 0) {
+                    newCountdownText = 'This timer has expired.';
+                    card.querySelector('h3').textContent = 'Window Closed';
+                    card.querySelector('h3').className = 'text-lg font-bold text-red-500';
+                    clearInterval(intervalId);
+                } else if (newTimeUntilStart <= 0) {
+                    newCountdownText = `Closes in: ${formatDuration(newTimeUntilEnd)}`;
+                    card.querySelector('h3').textContent = 'Window OPEN';
+                     card.querySelector('h3').className = 'text-lg font-bold text-green-400 animate-pulse';
+                } else {
+                    newCountdownText = `Opens in: ${formatDuration(newTimeUntilStart)}`;
+                }
+                card.querySelector('.text-2xl').textContent = newCountdownText;
+
+            }, 1000);
+
+            return card;
+        }
+
+        function formatDuration(ms) {
+            if (ms < 0) ms = 0;
+            const totalSeconds = Math.floor(ms / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+        
+        // --- Event Listeners ---
+        addTimerBtn.addEventListener('click', async () => {
+            const deathTimeValue = deathTimeInput.value;
+            if (!deathTimeValue) {
+                showToast("Please select a date and time.", 'error');
+                return;
+            }
+
+            if (timersCount >= 2) {
+                showToast("Cannot add more than 2 timers. Please delete one first.", 'error');
+                return;
+            }
+
+            // The input is local time, convert it to a UTC string for storage.
+            const localDate = new Date(deathTimeValue);
+            const utcDeathTime = localDate.toISOString();
+
+            try {
+                addTimerBtn.disabled = true;
+                addTimerBtn.textContent = 'Adding...';
+                
+                const timersCollectionPath = `/artifacts/${appId}/public/data/ant_queen_timers`;
+                await addDoc(collection(db, timersCollectionPath), {
+                    deathTime: utcDeathTime,
+                    createdAt: serverTimestamp(),
+                    creatorId: userId 
+                });
+                
+                showToast("Timer added successfully!", 'success');
+                deathTimeInput.value = '';
+                
+            } catch (error) {
+                console.error("Error adding timer: ", error);
+                showToast("Failed to add timer.", 'error');
+            } finally {
+                addTimerBtn.disabled = false;
+                addTimerBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg> Add Timer`;
+            }
+        });
+
+        timersContainer.addEventListener('click', async (e) => {
+            if (e.target.closest('.delete-btn')) {
+                const button = e.target.closest('.delete-btn');
+                const timerId = button.dataset.id;
+                
+                // A simple confirmation, better than window.confirm()
+                button.textContent = 'Confirm?';
+                button.classList.remove('btn-danger');
+                button.classList.add('bg-yellow-600', 'hover:bg-yellow-700');
+                
+                const confirmDelete = async () => {
+                    button.disabled = true;
+                    button.textContent = 'Deleting...';
+                    try {
+                        const timersCollectionPath = `/artifacts/${appId}/public/data/ant_queen_timers`;
+                        await deleteDoc(doc(db, timersCollectionPath, timerId));
+                        showToast("Timer deleted.", 'success');
+                    } catch (error) {
+                        console.error("Error deleting timer:", error);
+                        showToast("Failed to delete timer.", 'error');
+                        // Restore button on error
+                        button.textContent = 'Delete';
+                        button.disabled = false;
+                        button.classList.add('btn-danger');
+                        button.classList.remove('bg-yellow-600', 'hover:bg-yellow-700');
+                    }
+                };
+
+                const tempClickListener = (event) => {
+                    if (event.target === button) {
+                       confirmDelete();
+                    } else {
+                       // Restore button if clicked outside
+                       button.textContent = 'Delete';
+                       button.classList.add('btn-danger');
+                       button.classList.remove('bg-yellow-600', 'hover:bg-yellow-700');
+                    }
+                    document.removeEventListener('click', tempClickListener, true);
+                };
+
+                // Use setTimeout to attach the listener on the next tick to avoid capturing the initial click
+                setTimeout(() => document.addEventListener('click', tempClickListener, true), 0);
+            }
+        });
+    </script>
+</body>
+</html>
