@@ -41,6 +41,13 @@
         .party-slot-icon {
             filter: drop-shadow(0 0 3px rgba(228, 63, 90, 0.7));
         }
+        .btn-secondary {
+            background-color: #2c3e50;
+            border: 1px solid #34495e;
+        }
+        .btn-secondary:hover {
+            background-color: #34495e;
+        }
     </style>
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
@@ -92,7 +99,7 @@
                 <div id="placeholder" class="card rounded-lg p-8 h-full flex items-center justify-center text-center">
                     <div>
                         <svg class="mx-auto h-16 w-16 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                            <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 S0 01-2-2V5a2 2 0 012-2h5.586a1 1 M0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         <h3 class="mt-2 text-lg font-medium text-white">Your generated parties will appear here.</h3>
                         <p class="mt-1 text-gray-400">Select at least 9 people and click generate.</p>
@@ -202,14 +209,14 @@
                 const remainingChars = allAvailableChars.filter(char => {
                     return !usedCharNamesRun1.includes(char.name) && !usedPlayersRun1.includes(char.player);
                 });
-                 const remainingPlayerNames = availablePlayerNames.filter(p => !usedPlayersRun1.includes(p));
+                const remainingPlayerNames = availablePlayerNames.filter(p => !usedPlayersRun1.includes(p));
 
                 run2 = findParty(remainingChars, remainingPlayerNames, {}, true, new Map());
             } else {
                 run1 = findParty(allAvailableChars, selectedPlayerNames, {}, true, new Map());
             }
             
-            renderResults(run1, run2);
+            renderResults(run1, run2, allAvailableChars);
         }
         
         function findParty(characterPool, availablePlayerNames, limits = {}, isGreedy = true, criticalProviders = new Map()) {
@@ -258,13 +265,27 @@
                 const candidates = characterPool.filter(c => c.class === role && canAssign(c));
                 if (candidates.length === 0) continue;
 
-                candidates.sort((a, b) => {
-                    const scoreA = (criticalProviders.has(a.player) ? 0 : 5) + (characterPool.some(c => c.player === a.player && c.isMain) ? 0 : 10);
-                    const scoreB = (criticalProviders.has(b.player) ? 0 : 5) + (characterPool.some(c => c.player === b.player && c.isMain) ? 0 : 10);
-                    return scoreB - scoreA;
-                });
-
-                assign(role, candidates[0]);
+                // Specific COV strategy for Run 1
+                if (role === 'COV' && !isGreedy) {
+                    const humaxCov = candidates.find(c => c.char.name === 'Humax');
+                    const romeowCov = candidates.find(c => c.char.name === 'Romeow');
+                    if (humaxCov) { // Prioritize Humax
+                        assign(role, humaxCov);
+                    } else if (candidates.length > 1 && romeowCov) { // Avoid Romeow if other options exist
+                        const otherCov = candidates.find(c => c.char.name !== 'Romeow');
+                        if (otherCov) assign(role, otherCov);
+                        else assign(role, romeowCov); // Use Romeow as last resort
+                    } else if (candidates.length > 0) {
+                        assign(role, candidates[0]);
+                    }
+                } else { // Standard logic for other roles/runs
+                    candidates.sort((a, b) => {
+                        const scoreA = (criticalProviders.has(a.player) ? 0 : 5);
+                        const scoreB = (criticalProviders.has(b.player) ? 0 : 5);
+                        return scoreB - scoreA;
+                    });
+                    assign(role, candidates[0]);
+                }
                 neededSupportRoles.delete(role);
             }
 
@@ -289,25 +310,25 @@
                 assign('DD', ddCandidates[0]);
                 neededDamageRoles--;
             }
-            
-            // Pass 4: Greedy optional members
-            if (isGreedy) {
-                if (Object.keys(party).length >= 9) {
-                     let optionalCandidate = null;
-                     if (Object.values(party).some(p=>p.role === 'Bishop')) {
-                        optionalCandidate = characterPool.find(c => c.player === 'Galena' && optionalRoles.includes(c.class) && canAssign(c));
-                     }
-                     if (!optionalCandidate && Object.values(party).some(p=>p.role === 'FI')) {
-                        optionalCandidate = characterPool.find(c => c.player === 'Pap1ll0n' && optionalRoles.includes(c.class) && canAssign(c));
-                     }
-                     if (!optionalCandidate) {
-                        optionalCandidate = characterPool.find(c => optionalRoles.includes(c.class) && canAssign(c));
-                     }
-                     if (optionalCandidate) assign(optionalCandidate.class, optionalCandidate);
+
+            // Pass 4: Try to add optional members (even in run 1 if possible)
+            const isFullParty = Object.keys(party).length >= 9 && neededSupportRoles.size === 0 && neededDamageRoles <= 0;
+            if (isFullParty) {
+                let optionalCandidate = null;
+                if (Object.values(party).some(p=>p.role === 'Bishop')) {
+                    optionalCandidate = characterPool.find(c => c.player === 'Galena' && optionalRoles.includes(c.class) && canAssign(c));
                 }
+                if (!optionalCandidate && Object.values(party).some(p=>p.role === 'FI')) {
+                    optionalCandidate = characterPool.find(c => c.player === 'Pap1ll0n' && optionalRoles.includes(c.class) && canAssign(c));
+                }
+                if (!optionalCandidate) {
+                    optionalCandidate = characterPool.find(c => optionalRoles.includes(c.class) && canAssign(c));
+                }
+                if (optionalCandidate) assign(optionalCandidate.class, optionalCandidate);
+
                 if (Object.keys(party).length >= 10) {
-                    const extraDdCandidate = characterPool.find(c => c.class === 'DD' && canAssign(c));
-                    if(extraDdCandidate) assign('DD', extraDdCandidate);
+                     const extraDdCandidate = characterPool.find(c => c.class === 'DD' && canAssign(c));
+                     if(extraDdCandidate) assign('DD', extraDdCandidate);
                 }
             }
             
@@ -329,17 +350,27 @@
             return { party, success, missingRoles, freePlayers };
         }
         
-        function renderResults(run1, run2) {
+        function renderResults(run1, run2, allChars) {
             placeholder.classList.add('hidden');
             resultsContainer.innerHTML = '';
-            resultsContainer.appendChild(createPartyCard('Run 1', run1));
-            if (run2) resultsContainer.appendChild(createPartyCard('Run 2', run2));
+            
+            let remainingForRun2 = allChars;
+            if (run1) {
+                const run1UsedChars = Object.values(run1.party).map(p => p.char.name);
+                const run1UsedPlayers = Object.keys(run1.party);
+                remainingForRun2 = allChars.filter(c => !run1UsedChars.includes(c.name) && !run1UsedPlayers.includes(c.player));
+                resultsContainer.appendChild(createPartyCard('Run 1', run1, allChars));
+            }
+            if (run2) {
+                resultsContainer.appendChild(createPartyCard('Run 2', run2, remainingForRun2));
+            }
         }
         
-        function createPartyCard(title, runData) {
+        function createPartyCard(title, runData, characterPool) {
             const card = document.createElement('div');
             card.className = 'card rounded-lg p-6 shadow-lg';
             card.innerHTML = `<h2 class="text-2xl font-bold mb-4 ${runData.success ? 'text-green-400' : 'text-red-400'}">${title} - ${runData.success ? 'Composition Found' : 'Failed to Form Party'}</h2>`;
+            
             const grid = document.createElement('div');
             grid.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4';
             const displayOrder = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS', 'FI', 'DD', ...optionalRoles];
@@ -375,14 +406,64 @@
                 });
             }
             card.appendChild(grid);
+            
+            // Available Characters Section
+            const partyPlayerNames = Object.keys(runData.party);
+            const partyCharNames = Object.values(runData.party).map(p => p.char.name);
+            const availableChars = characterPool.filter(c => !partyPlayerNames.includes(c.player) && !partyCharNames.includes(c.name));
+
+            const availableCharsSection = document.createElement('div');
+            availableCharsSection.className = 'mt-6';
+            
+            if (availableChars.length > 0) {
+                availableCharsSection.innerHTML = `
+                    <button class="show-available-btn btn-secondary text-white font-semibold py-2 px-4 rounded-md text-sm w-full">Show Available Characters</button>
+                    <div class="available-chars-list hidden mt-4 p-4 bg-gray-900/50 rounded-lg max-h-48 overflow-y-auto"></div>
+                `;
+            }
+
             if (runData.freePlayers.length > 0) {
                 const freePlayersEl = document.createElement('div');
-                freePlayersEl.className = 'mt-6 pt-4 border-t border-gray-600';
+                freePlayersEl.className = 'mt-4 pt-4 border-t border-gray-600';
                 freePlayersEl.innerHTML = `
                     <h3 class="text-lg font-semibold text-cyan-400">Player(s) on Standby:</h3>
                     <p class="text-gray-300">${runData.freePlayers.join(', ')}</p>`;
-                card.appendChild(freePlayersEl);
+                availableCharsSection.appendChild(freePlayersEl);
             }
+
+            card.appendChild(availableCharsSection);
+
+            const showBtn = card.querySelector('.show-available-btn');
+            if (showBtn) {
+                showBtn.addEventListener('click', (e) => {
+                    const listContainer = e.target.nextElementSibling;
+                    const isHidden = listContainer.classList.contains('hidden');
+                    
+                    if (isHidden) {
+                        const groupedByPlayer = availableChars.reduce((acc, char) => {
+                            if (!acc[char.player]) acc[char.player] = [];
+                            acc[char.player].push(char);
+                            return acc;
+                        }, {});
+
+                        let listHtml = '<ul class="space-y-2">';
+                        for (const player in groupedByPlayer) {
+                            const charsString = groupedByPlayer[player].map(c => `${c.name} (${c.class})`).join(', ');
+                            listHtml += `<li><span class="font-bold text-white">${player}:</span> <span class="text-gray-300">${charsString}</span></li>`;
+                        }
+                        listHtml += '</ul>';
+
+                        listContainer.innerHTML = listHtml;
+                        listContainer.classList.remove('hidden');
+                        e.target.textContent = 'Hide Available Characters';
+                    } else {
+                        listContainer.classList.add('hidden');
+                        listContainer.innerHTML = '';
+                        e.target.textContent = 'Show Available Characters';
+                    }
+                });
+            }
+
             return card;
         }
         
