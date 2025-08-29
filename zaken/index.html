@@ -92,7 +92,7 @@
                 <div id="placeholder" class="card rounded-lg p-8 h-full flex items-center justify-center text-center">
                     <div>
                         <svg class="mx-auto h-16 w-16 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                            <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 S0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 S0 01-2-2V5a2 2 0 012-2h5.586a1 1 M0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         <h3 class="mt-2 text-lg font-medium text-white">Your generated parties will appear here.</h3>
                         <p class="mt-1 text-gray-400">Select at least 9 people and click generate.</p>
@@ -196,10 +196,15 @@
                 
                 run1 = findParty(allAvailableChars, selectedPlayerNames, run1Limits, false, criticalProviders);
                 
+                const usedPlayersRun1 = Object.keys(run1.party);
                 const usedCharNamesRun1 = Object.values(run1.party).map(p => p.char.name);
-                const remainingChars = allAvailableChars.filter(char => !usedCharNamesRun1.includes(char.name));
-                
-                run2 = findParty(remainingChars, selectedPlayerNames, {}, true, new Map());
+
+                const remainingChars = allAvailableChars.filter(char => {
+                    return !usedCharNamesRun1.includes(char.name) && !usedPlayersRun1.includes(char.player);
+                });
+                 const remainingPlayerNames = availablePlayerNames.filter(p => !usedPlayersRun1.includes(p));
+
+                run2 = findParty(remainingChars, remainingPlayerNames, {}, true, new Map());
             } else {
                 run1 = findParty(allAvailableChars, selectedPlayerNames, {}, true, new Map());
             }
@@ -209,15 +214,13 @@
         
         function findParty(characterPool, availablePlayerNames, limits = {}, isGreedy = true, criticalProviders = new Map()) {
             const party = {};
-            const assignedPlayers = new Set();
-            const assignedChars = new Set();
             
             let cwCount = 0;
             let strongDdCount = 0;
             const { maxCw = Infinity, maxStrongDDs = Infinity } = limits;
 
             const canAssign = (char) => {
-                if (assignedPlayers.has(char.player) || assignedChars.has(char.name)) return false;
+                if (party[char.player] || Object.values(party).some(p => p.char.name === char.name)) return false;
                 if (char.special === 'CW' && cwCount >= maxCw) return false;
                 if (char.strength === 'high' && strongDdCount >= maxStrongDDs) return false;
                 if (char.shareGroup && Object.values(party).some(p => p.char.shareGroup === char.shareGroup)) return false;
@@ -225,68 +228,66 @@
             };
             
             const assign = (role, char) => {
-                party[char.player] = { role, char }; // Use player name as key to prevent duplicates
-                assignedPlayers.add(char.player);
-                assignedChars.add(char.name);
+                party[char.player] = { role, char };
                 if (char.special === 'CW') cwCount++;
                 if (char.strength === 'high') strongDdCount++;
             };
             
             const supportRoles = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS'];
             const neededSupportRoles = new Set(supportRoles);
+            let neededDamageRoles = 4;
 
-            // Pass 1: Assign mains to their preferred roles (Supports + DDs)
+            // Pass 1: Assign ALL mains to their role if possible.
             characterPool.forEach(char => {
-                if (char.isMain && canAssign(char)) {
-                    if (supportRoles.includes(char.class) && neededSupportRoles.has(char.class)) {
-                        assign(char.class, char);
-                        neededSupportRoles.delete(char.class);
-                    }
+                if (!char.isMain || !canAssign(char)) return;
+
+                if (neededSupportRoles.has(char.class)) {
+                    assign(char.class, char);
+                    neededSupportRoles.delete(char.class);
+                } else if (char.class === 'FI' && neededDamageRoles > 0) {
+                    assign('FI', char);
+                    neededDamageRoles--;
+                } else if (char.class === 'DD' && neededDamageRoles > 0) {
+                    assign('DD', char);
+                    neededDamageRoles--;
                 }
             });
 
-            // Pass 2: Fill remaining essential support roles
+            // Pass 2: Fill remaining essential support roles.
             for (const role of [...neededSupportRoles]) {
                 const candidates = characterPool.filter(c => c.class === role && canAssign(c));
-                // Prioritize candidates who are NOT critical providers for other roles
-                candidates.sort((a, b) => (criticalProviders.has(a.player) ? 1 : -1) - (criticalProviders.has(b.player) ? 1 : -1));
-                if (candidates.length > 0) {
-                    assign(role, candidates[0]);
-                    neededSupportRoles.delete(role);
-                }
+                if (candidates.length === 0) continue;
+
+                candidates.sort((a, b) => {
+                    const scoreA = (criticalProviders.has(a.player) ? 0 : 5) + (characterPool.some(c => c.player === a.player && c.isMain) ? 0 : 10);
+                    const scoreB = (criticalProviders.has(b.player) ? 0 : 5) + (characterPool.some(c => c.player === b.player && c.isMain) ? 0 : 10);
+                    return scoreB - scoreA;
+                });
+
+                assign(role, candidates[0]);
+                neededSupportRoles.delete(role);
             }
 
-            // Pass 3: Fill damage dealer slots (up to 4, including FI)
-            const filledDamageCount = () => Object.values(party).filter(p => ['DD', 'FI'].includes(p.role)).length;
-            const neededDamageSlots = () => 4 - filledDamageCount();
-
-            // 3a: Prioritize an FI
-            if (neededDamageSlots() > 0) {
+            // Pass 3: Fill remaining damage roles.
+            if (neededDamageRoles > 0 && !Object.values(party).some(p => p.role === 'FI')) {
                 const fiCandidates = characterPool.filter(c => c.class === 'FI' && canAssign(c));
                 if (fiCandidates.length > 0) {
                     assign('FI', fiCandidates[0]);
+                    neededDamageRoles--;
                 }
             }
-
-            // 3b: Add main DDs who weren't assigned yet
-            characterPool.forEach(char => {
-                if (neededDamageSlots() > 0 && char.isMain && char.class === 'DD' && canAssign(char)) {
-                    assign('DD', char);
-                }
-            });
-
-            // 3c: Fill remaining damage slots with best available DDs
-            while(neededDamageSlots() > 0) {
+            
+            while(neededDamageRoles > 0) {
                 const ddCandidates = characterPool.filter(c => c.class === 'DD' && canAssign(c));
-                if (ddCandidates.length === 0) break; // No more DDs
+                if (ddCandidates.length === 0) break; 
 
-                // Sort by CW > Not Critical Provider > regular
                 ddCandidates.sort((a, b) => {
                     const scoreA = (a.special === 'CW' ? 10 : 0) + (criticalProviders.has(a.player) ? 0 : 5);
                     const scoreB = (b.special === 'CW' ? 10 : 0) + (criticalProviders.has(b.player) ? 0 : 5);
                     return scoreB - scoreA;
                 });
                 assign('DD', ddCandidates[0]);
+                neededDamageRoles--;
             }
             
             // Pass 4: Greedy optional members
@@ -323,7 +324,8 @@
                 for (let i = 0; i < neededDDs; i++) missingRoles.push('DD/FI');
             }
             
-            const freePlayers = availablePlayerNames.filter(name => !assignedPlayers.has(name));
+            const assignedPlayerNames = Object.keys(party);
+            const freePlayers = availablePlayerNames.filter(name => !assignedPlayerNames.includes(name));
             return { party, success, missingRoles, freePlayers };
         }
         
