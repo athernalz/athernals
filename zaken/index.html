@@ -107,16 +107,16 @@
         const playerData = [
             { name: 'Ahra', characters: [{ name: 'ahra', class: 'Bishop' }, { name: 'Vitina', class: 'Bishop' }, { name: 'Bobicu', class: 'DD' }, { name: 'MaDRabbit', class: 'DD', special: 'CW' }, { name: 'Thalik', class: 'DD', special: 'CW' }, { name: 'Axylia', class: 'SWS' }] },
             { name: 'Axylia', characters: [{ name: 'Axylia', class: 'SWS' }, { name: 'Romeow', class: 'COV' }] },
-            { name: 'Bobicu', characters: [{ name: 'Bobicu', class: 'DD' }, { name: 'IWontHitYou', class: 'DD' }, { name: 'Axylia', class: 'SWS' }, { name: 'ahra', class: 'Bishop' }, { name: 'Vitina', class: 'Bishop' }, { name: 'MyDance', class: 'Recharger' }, { name: 'MyDance', class: 'BD' }] },
+            { name: 'Bobicu', characters: [{ name: 'Bobicu', class: 'DD', strength: 'high' }, { name: 'IWontHitYou', class: 'DD', shareGroup: 'A' }, { name: 'Axylia', class: 'SWS' }, { name: 'ahra', class: 'Bishop' }, { name: 'Vitina', class: 'Bishop' }, { name: 'MyDance', class: 'Recharger' }, { name: 'MyDance', class: 'BD' }] },
             { name: 'iKiku', characters: [{ name: 'iKiku', class: 'FI' }, { name: 'LaaLaa', class: 'SWS' }] },
-            { name: 'IWillClapYou', characters: [{ name: 'IWillClapYou', class: 'Recharger' }, { name: 'IWontHitYou', class: 'DD' }, { name: 'MaDRabbit', class: 'DD', special: 'CW' }] },
+            { name: 'IWillClapYou', characters: [{ name: 'IWillClapYou', class: 'Recharger' }, { name: 'IWontHitYou', class: 'DD', shareGroup: 'A' }, { name: 'MaDRabbit', class: 'DD', special: 'CW' }] },
             { name: 'MaDRabbit', characters: [{ name: 'MaDRabbit', class: 'DD', special: 'CW' }, { name: 'Romeow', class: 'COV' }] },
             { name: 'Pap1ll0n', characters: [{ name: 'Pap1ll0n', class: 'FI' }, { name: 'Vayek', class: 'JUDI' }, { name: 'Dreamhack', class: 'DD' }, { name: 'BlackKarou', class: 'DOD' }] },
-            { name: 'Thalik', characters: [{ name: 'Thalik', class: 'DD', special: 'CW' }, { name: 'IWontHitYou', class: 'DD' }, { name: 'Romeow', class: 'COV' }] },
+            { name: 'Thalik', characters: [{ name: 'Thalik', class: 'DD', special: 'CW' }, { name: 'IWontHitYou', class: 'DD', shareGroup: 'A' }, { name: 'Romeow', class: 'COV' }] },
             { name: 'Zerathell', characters: [{ name: 'Zerathell', class: 'BD' }, { name: 'MyDance', class: 'BD' }] },
-            { name: 'Dreamhack', characters: [{ name: 'Dreamhack', class: 'DD' }, { name: 'Vayek', class: 'JUDI' }, { name: 'BlackKarou', class: 'DOD' }] },
-            { name: 'Humax', characters: [{ name: 'iHumax', class: 'DD' }, { name: 'Xamuh', class: 'DD' }] },
-            { name: 'MrA', characters: [{ name: 'MrA', class: 'Recharger' }, { name: 'Humax', class: 'COV' }, { name: 'iHumax', class: 'DD' }, { name: 'Xamuh', class: 'DD' }, { name: 'iKiku', class: 'FI' }] },
+            { name: 'Dreamhack', characters: [{ name: 'Dreamhack', class: 'DD', strength: 'high' }, { name: 'Vayek', class: 'JUDI' }, { name: 'BlackKarou', class: 'DOD' }] },
+            { name: 'Humax', characters: [{ name: 'iHumax', class: 'DD' }, { name: 'Xamuh', class: 'DD', shareGroup: 'A' }] },
+            { name: 'MrA', characters: [{ name: 'MrA', class: 'Recharger' }, { name: 'Humax', class: 'COV' }, { name: 'iHumax', class: 'DD' }, { name: 'Xamuh', class: 'DD', shareGroup: 'A' }, { name: 'iKiku', class: 'FI' }] },
             { name: 'Galena', characters: [{ name: 'Vayek', class: 'JUDI' }, { name: 'BlackKarou', class: 'DOD' }, { name: 'Galena', class: 'Bishop' }] },
         ];
 
@@ -140,41 +140,32 @@
         const resultsContainer = document.getElementById('results-container');
         const placeholder = document.getElementById('placeholder');
 
-        // --- Initialization ---
         function initialize() {
-            // Populate player list
-            playerData.sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically
+            playerData.sort((a, b) => a.name.localeCompare(b.name));
             playerData.forEach(player => {
                 const label = document.createElement('label');
                 label.className = 'cursor-pointer';
                 const playerNameLower = player.name.toLowerCase();
-                
                 label.innerHTML = `
                     <input type="checkbox" data-name="${player.name}" class="player-checkbox hidden">
                     <div class="player-card p-2 rounded-lg border-2 border-gray-700 bg-gray-800/50 hover:bg-gray-700/70 transition-all duration-200 flex flex-col items-center text-center h-full">
                         <img src="pfps/${playerNameLower}.png" alt="${player.name}" class="w-16 h-16 rounded-full object-cover mb-2 transition-all duration-200">
                         <span class="text-sm font-semibold">${player.name}</span>
-                    </div>
-                `;
+                    </div>`;
                 playerListContainer.appendChild(label);
             });
-            
-            // Add event listeners
             playerListContainer.addEventListener('change', updateSelectedCount);
             generateBtn.addEventListener('click', handleGeneration);
         }
 
-        // --- UI Updates ---
         function updateSelectedCount() {
-            const selectedPlayers = getSelectedPlayers();
-            selectedCountEl.textContent = selectedPlayers.length;
+            selectedCountEl.textContent = getSelectedPlayers().length;
         }
 
         function getSelectedPlayers() {
             return Array.from(document.querySelectorAll('.player-checkbox:checked')).map(cb => cb.dataset.name);
         }
         
-        // --- Core Logic ---
         function handleGeneration() {
             const selectedPlayerNames = getSelectedPlayers();
             const numRuns = parseInt(document.querySelector('input[name="runs"]:checked').value, 10);
@@ -189,72 +180,74 @@
                 return player.characters.map(char => {
                     const isHumaxMain = player.name === 'Humax' && char.name === 'iHumax';
                     const isStandardMain = player.name.toLowerCase() === char.name.toLowerCase();
-                    return {
-                        player: player.name,
-                        isMain: isHumaxMain || isStandardMain,
-                        ...char
-                    }
+                    return { player: player.name, isMain: isHumaxMain || isStandardMain, ...char };
                 });
             });
 
             let run1 = null, run2 = null;
 
             if (numRuns === 2) {
-                const cwCount = allAvailableChars.filter(c => c.special === 'CW').length;
-                // Limit Run 1 to one CW dagger if multiple are available, to save one for Run 2.
-                const maxCwForRun1 = cwCount > 1 ? 1 : cwCount;
+                const strongDdPool = allAvailableChars.filter(c => c.strength === 'high');
+                const cwPool = allAvailableChars.filter(c => c.special === 'CW');
+                const run1Limits = {
+                    maxCw: Math.ceil(cwPool.length / 2),
+                    maxStrongDDs: Math.ceil(strongDdPool.length / 2)
+                };
                 
-                // Run 1 is not "greedy" - it won't try to fill the 10th/11th optional slots
-                run1 = findParty(allAvailableChars, selectedPlayerNames, maxCwForRun1, false);
+                run1 = findParty(allAvailableChars, selectedPlayerNames, run1Limits, false);
                 
                 const usedCharNamesRun1 = Object.values(run1.party).map(p => p.char.name);
                 const remainingChars = allAvailableChars.filter(char => !usedCharNamesRun1.includes(char.name));
                 
-                // Run 2 can be greedy and take any remaining optional members
-                run2 = findParty(remainingChars, selectedPlayerNames, Infinity, true);
+                run2 = findParty(remainingChars, selectedPlayerNames, {}, true);
             } else {
-                // A single run can be greedy
-                run1 = findParty(allAvailableChars, selectedPlayerNames, Infinity, true);
+                run1 = findParty(allAvailableChars, selectedPlayerNames, {}, true);
             }
             
             renderResults(run1, run2);
         }
         
-        function findParty(characterPool, availablePlayerNames, maxCw = Infinity, isGreedy = true) {
+        function findParty(characterPool, availablePlayerNames, limits = {}, isGreedy = true) {
             const party = {};
             const assignedPlayers = new Set();
             const assignedChars = new Set();
             let slotsToFill = partySlots.map(s => s.role);
+            
             let cwCount = 0;
+            let strongDdCount = 0;
+            const { maxCw = Infinity, maxStrongDDs = Infinity } = limits;
+
+            const canAssign = (char, currentParty) => {
+                if (assignedPlayers.has(char.player) || assignedChars.has(char.name)) return false;
+                if (char.special === 'CW' && cwCount >= maxCw) return false;
+                if (char.strength === 'high' && strongDdCount >= maxStrongDDs) return false;
+                if (char.shareGroup) {
+                    if (Object.values(currentParty).some(p => p.char.shareGroup === char.shareGroup)) return false;
+                }
+                return true;
+            };
 
             const assign = (role, char) => {
                 party[Object.keys(party).length] = { role, char };
                 assignedPlayers.add(char.player);
                 assignedChars.add(char.name);
                 if (char.special === 'CW') cwCount++;
+                if (char.strength === 'high') strongDdCount++;
                 const roleIndex = slotsToFill.indexOf(role);
                 if (roleIndex > -1) slotsToFill.splice(roleIndex, 1);
             };
 
-            const canAssign = (char) => {
-                if (assignedPlayers.has(char.player) || assignedChars.has(char.name)) return false;
-                // Respect the max CW limit for this run
-                if (char.special === 'CW' && cwCount >= maxCw) return false;
-                return true;
-            };
-
-            // Pass 1: Prioritize mains for required slots
+            // Logic passes (1-7)
             for (const role of [...partySlots.map(s => s.role)]) {
                  if (!slotsToFill.includes(role)) continue;
-                 const candidate = characterPool.find(c => c.class === role && c.isMain && canAssign(c));
+                 const candidate = characterPool.find(c => c.class === role && c.isMain && canAssign(c, party));
                  if (candidate) assign(role, candidate);
             }
 
-            // Pass 2: Handle unique providers for remaining critical roles
             const criticalRoles = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS', 'FI'];
             for (const role of criticalRoles) {
                 if (!slotsToFill.includes(role)) continue;
-                const candidates = characterPool.filter(c => c.class === role && canAssign(c));
+                const candidates = characterPool.filter(c => c.class === role && canAssign(c, party));
                 const uniqueProviders = [...new Set(candidates.map(c => c.player))];
                 if (uniqueProviders.length === 1) {
                     const charToAssign = candidates.find(c => c.player === uniqueProviders[0]);
@@ -262,9 +255,8 @@
                 }
             }
             
-            // Pass 3: Galena Bishop check - if bishop is unfilled and she is the only one who can do it
             if (slotsToFill.includes('Bishop')) {
-                const bishopCandidates = characterPool.filter(c => c.class === 'Bishop' && canAssign(c));
+                const bishopCandidates = characterPool.filter(c => c.class === 'Bishop' && canAssign(c, party));
                 const uniqueBishopPlayers = [...new Set(bishopCandidates.map(c => c.player))];
                 if (uniqueBishopPlayers.length === 1 && uniqueBishopPlayers[0] === 'Galena') {
                     const galenaBishop = bishopCandidates.find(c => c.player === 'Galena');
@@ -272,58 +264,45 @@
                 }
             }
 
-            // Pass 4: Try to get a CW dagger (if not assigned via mains)
             if (slotsToFill.includes('DD')) {
-                const cwCandidate = characterPool.find(c => c.special === 'CW' && canAssign(c));
+                const cwCandidate = characterPool.find(c => c.special === 'CW' && canAssign(c, party));
                 if (cwCandidate) assign('DD', cwCandidate);
             }
 
-            // Pass 5: Fill remaining required slots
             for (const role of [...slotsToFill]) {
-                const candidate = characterPool.find(c => c.class === role && canAssign(c));
+                const candidate = characterPool.find(c => c.class === role && canAssign(c, party));
                 if (candidate) assign(role, candidate);
             }
 
-            // Pass 6 & 7: Optional members (only if isGreedy)
             if (isGreedy) {
-                // Pass 6: 10th member (JUDI/DOD) with prioritization
                 if (Object.keys(party).length >= 9) {
                      let optionalCandidate = null;
                      const isBishopFilled = Object.values(party).some(p=>p.role === 'Bishop');
                      const isFiFilled = Object.values(party).some(p=>p.role === 'FI');
-
                      if (isBishopFilled) {
-                        optionalCandidate = characterPool.find(c => c.player === 'Galena' && optionalRoles.includes(c.class) && canAssign(c));
+                        optionalCandidate = characterPool.find(c => c.player === 'Galena' && optionalRoles.includes(c.class) && canAssign(c, party));
                      }
                      if (!optionalCandidate && isFiFilled) {
-                        optionalCandidate = characterPool.find(c => c.player === 'Pap1ll0n' && optionalRoles.includes(c.class) && canAssign(c));
+                        optionalCandidate = characterPool.find(c => c.player === 'Pap1ll0n' && optionalRoles.includes(c.class) && canAssign(c, party));
                      }
                      if (!optionalCandidate) {
-                        optionalCandidate = characterPool.find(c => optionalRoles.includes(c.class) && canAssign(c));
+                        optionalCandidate = characterPool.find(c => optionalRoles.includes(c.class) && canAssign(c, party));
                      }
                      if (optionalCandidate) assign(optionalCandidate.class, optionalCandidate);
                 }
-                
-                // Pass 7: 11th member (extra DD)
                 if (Object.keys(party).length >= 10) {
-                    const extraDdCandidate = characterPool.find(c => c.class === 'DD' && canAssign(c));
+                    const extraDdCandidate = characterPool.find(c => c.class === 'DD' && canAssign(c, party));
                     if(extraDdCandidate) assign('DD', extraDdCandidate);
                 }
             }
             
             const requiredCounts = partySlots.reduce((acc, slot) => ({...acc, [slot.role]: (acc[slot.role] || 0) + 1 }), {});
             const filledCounts = Object.values(party).reduce((acc, p) => ({...acc, [p.role]: (acc[p.role] || 0) + 1 }), {});
-            
-            let finalSuccess = true;
-            let missingRoles = [];
-
+            let finalSuccess = true, missingRoles = [];
             for (const role in requiredCounts) {
-                const filled = filledCounts[role] || 0;
-                if (filled < requiredCounts[role]) {
+                if ((filledCounts[role] || 0) < requiredCounts[role]) {
                     finalSuccess = false;
-                    for (let i = 0; i < requiredCounts[role] - filled; i++) {
-                        missingRoles.push(role);
-                    }
+                    for (let i = 0; i < requiredCounts[role] - (filledCounts[role] || 0); i++) missingRoles.push(role);
                 }
             }
             
@@ -331,7 +310,6 @@
             return { party, success: finalSuccess, missingRoles, freePlayers };
         }
         
-        // --- Rendering ---
         function renderResults(run1, run2) {
             placeholder.classList.add('hidden');
             resultsContainer.innerHTML = '';
@@ -342,12 +320,9 @@
         function createPartyCard(title, runData) {
             const card = document.createElement('div');
             card.className = 'card rounded-lg p-6 shadow-lg';
-            
             card.innerHTML = `<h2 class="text-2xl font-bold mb-4 ${runData.success ? 'text-green-400' : 'text-red-400'}">${title} - ${runData.success ? 'Composition Found' : 'Failed to Form Party'}</h2>`;
-            
             const grid = document.createElement('div');
             grid.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4';
-
             const displayOrder = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS', 'FI', 'DD', ...optionalRoles];
             const sortedParty = Object.values(runData.party).sort((a, b) => displayOrder.indexOf(a.role) - displayOrder.indexOf(b.role));
 
@@ -380,9 +355,7 @@
                     grid.appendChild(slotEl);
                 });
             }
-
             card.appendChild(grid);
-
             if (runData.freePlayers.length > 0) {
                 const freePlayersEl = document.createElement('div');
                 freePlayersEl.className = 'mt-6 pt-4 border-t border-gray-600';
@@ -391,7 +364,6 @@
                     <p class="text-gray-300">${runData.freePlayers.join(', ')}</p>`;
                 card.appendChild(freePlayersEl);
             }
-
             return card;
         }
         
