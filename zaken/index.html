@@ -20,7 +20,7 @@
         }
         .btn-primary {
             background-color: #1f4068;
-            transition: background-color 0.3s ease;
+            transition: background-color: 0.3s ease;
         }
         .btn-primary:hover {
             background-color: #275288;
@@ -87,7 +87,7 @@
                 <div id="placeholder" class="card rounded-lg p-8 h-full flex items-center justify-center text-center">
                     <div>
                         <svg class="mx-auto h-16 w-16 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                            <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 S0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         <h3 class="mt-2 text-lg font-medium text-white">Your generated parties will appear here.</h3>
                         <p class="mt-1 text-gray-400">Select at least 9 people and click generate.</p>
@@ -182,20 +182,24 @@
                 }));
             });
 
-            const run1 = findParty(allAvailableChars);
+            const run1 = findParty(allAvailableChars, selectedPlayerNames);
             
             let run2 = null;
             if (numRuns === 2) {
-                const usedCharNames = Object.values(run1.party).map(p => p.char.name);
-                const remainingChars = allAvailableChars.filter(char => !usedCharNames.includes(char.name));
-                run2 = findParty(remainingChars);
+                const usedCharNamesRun1 = Object.values(run1.party).map(p => p.char.name);
+                const usedPlayersRun1 = [...new Set(Object.values(run1.party).map(p => p.char.player))];
+                
+                const remainingChars = allAvailableChars.filter(char => !usedCharNamesRun1.includes(char.name));
+                const remainingPlayers = selectedPlayerNames.filter(p => !usedPlayersRun1.includes(p));
+                
+                run2 = findParty(remainingChars, remainingPlayers);
             }
             
             renderResults(run1, run2);
         }
         
         // This function attempts to find a valid party composition from a pool of characters
-        function findParty(characterPool) {
+        function findParty(characterPool, availablePlayerNames) {
             const party = {};
             const assignedPlayers = new Set();
             const assignedChars = new Set();
@@ -205,12 +209,10 @@
 
             // Helper to assign a character
             const assign = (role, char) => {
-                // Find an empty slot for this role
                 const slotIndex = Object.keys(party).length;
                 party[slotIndex] = { role, char };
                 assignedPlayers.add(char.player);
                 assignedChars.add(char.name);
-                // Remove the filled role from the list
                 const roleIndex = slotsToFill.indexOf(role);
                 if (roleIndex > -1) {
                     slotsToFill.splice(roleIndex, 1);
@@ -243,9 +245,27 @@
                 }
             }
             
-            // Pass 4: 10th member (JUDI/DOD)
+            // Pass 4: 10th member (JUDI/DOD) with prioritization
             if (Object.keys(party).length >= 9) {
-                 const optionalCandidate = pool.find(c => optionalRoles.includes(c.class) && !assignedPlayers.has(c.player));
+                 let optionalCandidate = null;
+                 const isBishopFilled = Object.values(party).some(p => p.role === 'Bishop');
+                 const isFiFilled = Object.values(party).some(p => p.role === 'FI');
+                 
+                 // Prioritize Galena if Bishop is taken
+                 if(isBishopFilled) {
+                    optionalCandidate = pool.find(c => c.player === 'Galena' && optionalRoles.includes(c.class) && !assignedPlayers.has(c.player));
+                 }
+                 
+                 // Prioritize Pap1ll0n if FI is taken and Galena wasn't chosen
+                 if(!optionalCandidate && isFiFilled) {
+                    optionalCandidate = pool.find(c => c.player === 'Pap1ll0n' && optionalRoles.includes(c.class) && !assignedPlayers.has(c.player));
+                 }
+
+                 // If no priority candidate, find any
+                 if(!optionalCandidate) {
+                    optionalCandidate = pool.find(c => optionalRoles.includes(c.class) && !assignedPlayers.has(c.player));
+                 }
+
                  if(optionalCandidate) {
                     assign(optionalCandidate.class, optionalCandidate);
                  }
@@ -286,7 +306,9 @@
                 }
             }
 
-            return { party, success, missingRoles };
+            const freePlayers = availablePlayerNames.filter(name => !assignedPlayers.has(name));
+
+            return { party, success, missingRoles, freePlayers };
         }
         
         // --- Rendering ---
@@ -340,12 +362,11 @@
                     const slotEl = document.createElement('div');
                     slotEl.className = 'p-3 rounded-lg flex items-center bg-red-900/50 border border-red-700';
                     slotEl.innerHTML = `
-                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-700 flex items-center justify-center font-bold text-red-400 text-sm party-slot-icon">
-                            ${role}
+                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-700">
                         </div>
                         <div class="ml-3">
                             <p class="text-md font-semibold text-red-300">MISSING</p>
-                            <p class="text-sm text-red-400">Role could not be filled.</p>
+                            <p class="text-sm text-red-400">${role}</p>
                         </div>
                     `;
                     grid.appendChild(slotEl);
@@ -354,6 +375,18 @@
 
             card.innerHTML = content;
             card.appendChild(grid);
+
+            // Render Free Players
+            if (runData.freePlayers && runData.freePlayers.length > 0) {
+                const freePlayersEl = document.createElement('div');
+                freePlayersEl.className = 'mt-6 pt-4 border-t border-gray-600';
+                freePlayersEl.innerHTML = `
+                    <h3 class="text-lg font-semibold text-cyan-400">Player(s) on Standby:</h3>
+                    <p class="text-gray-300">${runData.freePlayers.join(', ')}</p>
+                `;
+                card.appendChild(freePlayersEl);
+            }
+
             return card;
         }
         
@@ -377,5 +410,4 @@
     </script>
 </body>
 </html>
-
 
