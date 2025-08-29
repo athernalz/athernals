@@ -197,45 +197,64 @@
                 });
             });
 
-            const run1 = findParty(allAvailableChars, selectedPlayerNames);
-            
-            let run2 = null;
+            let run1 = null, run2 = null;
+
             if (numRuns === 2) {
+                const cwCount = allAvailableChars.filter(c => c.special === 'CW').length;
+                // Limit Run 1 to one CW dagger if multiple are available, to save one for Run 2.
+                const maxCwForRun1 = cwCount > 1 ? 1 : cwCount;
+                
+                // Run 1 is not "greedy" - it won't try to fill the 10th/11th optional slots
+                run1 = findParty(allAvailableChars, selectedPlayerNames, maxCwForRun1, false);
+                
                 const usedCharNamesRun1 = Object.values(run1.party).map(p => p.char.name);
                 const remainingChars = allAvailableChars.filter(char => !usedCharNamesRun1.includes(char.name));
-                run2 = findParty(remainingChars, selectedPlayerNames);
+                
+                // Run 2 can be greedy and take any remaining optional members
+                run2 = findParty(remainingChars, selectedPlayerNames, Infinity, true);
+            } else {
+                // A single run can be greedy
+                run1 = findParty(allAvailableChars, selectedPlayerNames, Infinity, true);
             }
             
             renderResults(run1, run2);
         }
         
-        function findParty(characterPool, availablePlayerNames) {
+        function findParty(characterPool, availablePlayerNames, maxCw = Infinity, isGreedy = true) {
             const party = {};
             const assignedPlayers = new Set();
             const assignedChars = new Set();
             let slotsToFill = partySlots.map(s => s.role);
+            let cwCount = 0;
 
             const assign = (role, char) => {
                 party[Object.keys(party).length] = { role, char };
                 assignedPlayers.add(char.player);
                 assignedChars.add(char.name);
+                if (char.special === 'CW') cwCount++;
                 const roleIndex = slotsToFill.indexOf(role);
                 if (roleIndex > -1) slotsToFill.splice(roleIndex, 1);
             };
 
+            const canAssign = (char) => {
+                if (assignedPlayers.has(char.player) || assignedChars.has(char.name)) return false;
+                // Respect the max CW limit for this run
+                if (char.special === 'CW' && cwCount >= maxCw) return false;
+                return true;
+            };
+
             // Pass 1: Prioritize mains for required slots
-            for (const role of [...slotsToFill]) {
-                const candidate = characterPool.find(c => 
-                    c.class === role && c.isMain && !assignedPlayers.has(c.player) && !assignedChars.has(c.name)
-                );
-                if (candidate) assign(role, candidate);
+            for (const role of [...partySlots.map(s => s.role)]) {
+                 if (!slotsToFill.includes(role)) continue;
+                 const candidate = characterPool.find(c => c.class === role && c.isMain && canAssign(c));
+                 if (candidate) assign(role, candidate);
             }
 
             // Pass 2: Handle unique providers for remaining critical roles
             const criticalRoles = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS', 'FI'];
             for (const role of criticalRoles) {
                 if (!slotsToFill.includes(role)) continue;
-                const candidates = characterPool.filter(c => c.class === role && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
+                const candidates = characterPool.filter(c => c.class === role && canAssign(c));
                 const uniqueProviders = [...new Set(candidates.map(c => c.player))];
                 if (uniqueProviders.length === 1) {
                     const charToAssign = candidates.find(c => c.player === uniqueProviders[0]);
@@ -245,7 +264,7 @@
             
             // Pass 3: Galena Bishop check - if bishop is unfilled and she is the only one who can do it
             if (slotsToFill.includes('Bishop')) {
-                const bishopCandidates = characterPool.filter(c => c.class === 'Bishop' && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
+                const bishopCandidates = characterPool.filter(c => c.class === 'Bishop' && canAssign(c));
                 const uniqueBishopPlayers = [...new Set(bishopCandidates.map(c => c.player))];
                 if (uniqueBishopPlayers.length === 1 && uniqueBishopPlayers[0] === 'Galena') {
                     const galenaBishop = bishopCandidates.find(c => c.player === 'Galena');
@@ -253,55 +272,63 @@
                 }
             }
 
-            // Pass 4: Try to get a CW dagger
+            // Pass 4: Try to get a CW dagger (if not assigned via mains)
             if (slotsToFill.includes('DD')) {
-                const cwCandidate = characterPool.find(c => c.special === 'CW' && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
+                const cwCandidate = characterPool.find(c => c.special === 'CW' && canAssign(c));
                 if (cwCandidate) assign('DD', cwCandidate);
             }
 
             // Pass 5: Fill remaining required slots
             for (const role of [...slotsToFill]) {
-                const candidate = characterPool.find(c => c.class === role && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
+                const candidate = characterPool.find(c => c.class === role && canAssign(c));
                 if (candidate) assign(role, candidate);
             }
 
-            // Pass 6: 10th member (JUDI/DOD) with prioritization
-            if (Object.keys(party).length >= 9) {
-                 let optionalCandidate = null;
-                 const isBishopFilled = !slotsToFill.includes('Bishop');
-                 const isFiFilled = !Object.values(party).some(p => p.role === 'FI');
+            // Pass 6 & 7: Optional members (only if isGreedy)
+            if (isGreedy) {
+                // Pass 6: 10th member (JUDI/DOD) with prioritization
+                if (Object.keys(party).length >= 9) {
+                     let optionalCandidate = null;
+                     const isBishopFilled = Object.values(party).some(p=>p.role === 'Bishop');
+                     const isFiFilled = Object.values(party).some(p=>p.role === 'FI');
 
-                 if (isBishopFilled) {
-                    optionalCandidate = characterPool.find(c => c.player === 'Galena' && optionalRoles.includes(c.class) && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
-                 }
-                 if (!optionalCandidate && isFiFilled) {
-                    optionalCandidate = characterPool.find(c => c.player === 'Pap1ll0n' && optionalRoles.includes(c.class) && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
-                 }
-                 if (!optionalCandidate) {
-                    optionalCandidate = characterPool.find(c => optionalRoles.includes(c.class) && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
-                 }
-                 if (optionalCandidate) assign(optionalCandidate.class, optionalCandidate);
+                     if (isBishopFilled) {
+                        optionalCandidate = characterPool.find(c => c.player === 'Galena' && optionalRoles.includes(c.class) && canAssign(c));
+                     }
+                     if (!optionalCandidate && isFiFilled) {
+                        optionalCandidate = characterPool.find(c => c.player === 'Pap1ll0n' && optionalRoles.includes(c.class) && canAssign(c));
+                     }
+                     if (!optionalCandidate) {
+                        optionalCandidate = characterPool.find(c => optionalRoles.includes(c.class) && canAssign(c));
+                     }
+                     if (optionalCandidate) assign(optionalCandidate.class, optionalCandidate);
+                }
+                
+                // Pass 7: 11th member (extra DD)
+                if (Object.keys(party).length >= 10) {
+                    const extraDdCandidate = characterPool.find(c => c.class === 'DD' && canAssign(c));
+                    if(extraDdCandidate) assign('DD', extraDdCandidate);
+                }
             }
             
-            // Pass 7: 11th member (extra DD)
-            if (Object.keys(party).length >= 10) {
-                const extraDdCandidate = characterPool.find(c => c.class === 'DD' && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
-                if(extraDdCandidate) assign('DD', extraDdCandidate);
-            }
+            const requiredCounts = partySlots.reduce((acc, slot) => ({...acc, [slot.role]: (acc[slot.role] || 0) + 1 }), {});
+            const filledCounts = Object.values(party).reduce((acc, p) => ({...acc, [p.role]: (acc[p.role] || 0) + 1 }), {});
             
-            const success = partySlots.every(slot => !slotsToFill.includes(slot.role));
-
+            let finalSuccess = true;
             let missingRoles = [];
-            if (!success) {
-                 const requiredCounts = partySlots.reduce((acc, slot) => ({...acc, [slot.role]: (acc[slot.role] || 0) + 1 }), {});
-                 const filledCounts = Object.values(party).reduce((acc, p) => ({...acc, [p.role]: (acc[p.role] || 0) + 1 }), {});
-                 for (const role in requiredCounts) {
-                    for (let i = 0; i < requiredCounts[role] - (filledCounts[role] || 0); i++) missingRoles.push(role);
-                 }
+
+            for (const role in requiredCounts) {
+                const filled = filledCounts[role] || 0;
+                if (filled < requiredCounts[role]) {
+                    finalSuccess = false;
+                    for (let i = 0; i < requiredCounts[role] - filled; i++) {
+                        missingRoles.push(role);
+                    }
+                }
             }
             
             const freePlayers = availablePlayerNames.filter(name => !assignedPlayers.has(name));
-            return { party, success, missingRoles, freePlayers };
+            return { party, success: finalSuccess, missingRoles, freePlayers };
         }
         
         // --- Rendering ---
