@@ -1,1 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zaken Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a1a2e;
+            color: #e0e0e0;
+        }
+        .card {
+            background-color: #162447;
+            border: 1px solid #1f4068;
+        }
+        .btn-primary {
+            background-color: #1f4068;
+            transition: background-color 0.3s ease;
+        }
+        .btn-primary:hover {
+            background-color: #275288;
+        }
+        .checkbox-custom:checked {
+            background-color: #e43f5a;
+            border-color: #e43f5a;
+        }
+        .radio-custom:checked {
+            background-color: #e43f5a;
+            border-color: #e43f5a;
+        }
+        .party-slot-icon {
+            filter: drop-shadow(0 0 3px rgba(228, 63, 90, 0.7));
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-6xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-white tracking-wider">Zaken Generator</h1>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Controls Column -->
+            <div class="lg:col-span-1 card rounded-lg p-6 shadow-lg">
+                <div id="controls">
+                    <!-- People Selection -->
+                    <div>
+                        <h2 class="text-xl font-semibold mb-3 border-b-2 border-gray-600 pb-2">1. Select Available People</h2>
+                        <div id="player-list" class="space-y-2 max-h-96 overflow-y-auto pr-2">
+                            <!-- Player checkboxes will be injected here -->
+                        </div>
+                        <p class="mt-4 text-lg font-medium">Selected People: <span id="selected-count" class="font-bold text-white">0</span></p>
+                    </div>
+
+                    <!-- Run Selection -->
+                    <div class="mt-6">
+                        <h2 class="text-xl font-semibold mb-3 border-b-2 border-gray-600 pb-2">2. Select Number of Runs</h2>
+                        <div class="flex items-center space-x-6">
+                            <label class="flex items-center cursor-pointer">
+                                <input type="radio" name="runs" value="1" class="radio-custom h-5 w-5 rounded-full border-gray-500 text-pink-500 focus:ring-pink-400" checked>
+                                <span class="ml-2 text-lg">1 Run</span>
+                            </label>
+                            <label class="flex items-center cursor-pointer">
+                                <input type="radio" name="runs" value="2" class="radio-custom h-5 w-5 rounded-full border-gray-500 text-pink-500 focus:ring-pink-400">
+                                <span class="ml-2 text-lg">2 Runs</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Generate Button -->
+                    <div class="mt-8">
+                         <button id="generate-btn" class="w-full btn-primary text-white font-bold py-3 px-4 rounded-lg text-lg shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-300">
+                            Generate Party
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Column -->
+            <div id="results-container" class="lg:col-span-2 space-y-6">
+                 <!-- Placeholder -->
+                <div id="placeholder" class="card rounded-lg p-8 h-full flex items-center justify-center text-center">
+                    <div>
+                        <svg class="mx-auto h-16 w-16 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <h3 class="mt-2 text-lg font-medium text-white">Your generated parties will appear here.</h3>
+                        <p class="mt-1 text-gray-400">Select at least 9 people and click generate.</p>
+                    </div>
+                </div>
+                <!-- Generated parties will be injected here -->
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const playerData = [
+            { name: 'Ahra', characters: [{ name: 'ahra', class: 'Bishop' }, { name: 'Vitina', class: 'Bishop' }, { name: 'Bobicu', class: 'DD' }, { name: 'MaDRabbit', class: 'DD', special: 'CW' }, { name: 'Thalik', class: 'DD', special: 'CW' }, { name: 'Axylia', class: 'SWS' }] },
+            { name: 'Axylia', characters: [{ name: 'Axylia', class: 'SWS' }, { name: 'Romeow', class: 'COV' }] },
+            { name: 'Bobicu', characters: [{ name: 'Bobicu', class: 'DD' }, { name: 'IWontHitYou', class: 'DD' }] },
+            { name: 'iKiku', characters: [{ name: 'iKiku', class: 'FI' }, { name: 'LaaLaa', class: 'SWS' }] },
+            { name: 'IWillClapYou', characters: [{ name: 'IWillClapYou', class: 'Recharger' }, { name: 'IWontHitYou', class: 'DD' }, { name: 'MaDRabbit', class: 'DD', special: 'CW' }] },
+            { name: 'MaDRabbit', characters: [{ name: 'MaDRabbit', class: 'DD', special: 'CW' }, { name: 'Romeow', class: 'COV' }] },
+            { name: 'Pap1ll0n', characters: [{ name: 'Pap1ll0n', class: 'FI' }, { name: 'Vayek', class: 'JUDI' }, { name: 'Dreamhack', class: 'DD' }, { name: 'BlackKarou', class: 'DOD' }] },
+            { name: 'Thalik', characters: [{ name: 'Thalik', class: 'DD', special: 'CW' }, { name: 'IWontHitYou', class: 'DD' }] },
+            { name: 'Zerathell', characters: [{ name: 'Zerathell', class: 'BD' }, { name: 'MyDance', class: 'BD' }] },
+            { name: 'Dreamhack', characters: [{ name: 'Dreamhack', class: 'DD' }] },
+            { name: 'Humax', characters: [{ name: 'iHumax', class: 'DD' }, { name: 'Xamuh', class: 'DD' }] },
+            { name: 'MrA', characters: [{ name: 'MrA', class: 'Recharger' }, { name: 'Humax', class: 'COV' }] },
+            { name: 'Galena', characters: [{ name: 'Vayek', class: 'JUDI' }, { name: 'BlackKarou', class: 'DOD' }, { name: 'Galena', class: 'Bishop' }] },
+        ];
+
+        const partySlots = [
+            { role: 'Bishop', icon: 'BP' },
+            { role: 'Recharger', icon: 'EE' },
+            { role: 'COV', icon: 'PP' },
+            { role: 'BD', icon: 'BD' },
+            { role: 'SWS', icon: 'SWS' },
+            { role: 'FI', icon: 'FI' },
+            { role: 'DD', icon: 'DD' },
+            { role: 'DD', icon: 'DD' },
+            { role: 'DD', icon: 'DD' },
+        ];
+        
+        const optionalRoles = ['DOD', 'JUDI'];
+
+        const playerListContainer = document.getElementById('player-list');
+        const selectedCountEl = document.getElementById('selected-count');
+        const generateBtn = document.getElementById('generate-btn');
+        const resultsContainer = document.getElementById('results-container');
+        const placeholder = document.getElementById('placeholder');
+
+        // --- Initialization ---
+        function initialize() {
+            // Populate player list
+            playerData.sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically
+            playerData.forEach(player => {
+                const label = document.createElement('label');
+                label.className = 'flex items-center cursor-pointer p-2 rounded-md hover:bg-gray-700/50 transition-colors';
+                label.innerHTML = `
+                    <input type="checkbox" data-name="${player.name}" class="player-checkbox checkbox-custom h-5 w-5 rounded border-gray-500 text-pink-500 focus:ring-pink-400">
+                    <span class="ml-3 text-lg">${player.name}</span>
+                `;
+                playerListContainer.appendChild(label);
+            });
+            
+            // Add event listeners
+            playerListContainer.addEventListener('change', updateSelectedCount);
+            generateBtn.addEventListener('click', handleGeneration);
+        }
+
+        // --- UI Updates ---
+        function updateSelectedCount() {
+            const selectedPlayers = getSelectedPlayers();
+            selectedCountEl.textContent = selectedPlayers.length;
+        }
+
+        function getSelectedPlayers() {
+            return Array.from(document.querySelectorAll('.player-checkbox:checked')).map(cb => cb.dataset.name);
+        }
+        
+        // --- Core Logic ---
+        function handleGeneration() {
+            const selectedPlayerNames = getSelectedPlayers();
+            const numRuns = parseInt(document.querySelector('input[name="runs"]:checked').value, 10);
+
+            if (selectedPlayerNames.length < 9) {
+                renderError("Not enough people!", "You need to select at least 9 people to form a full party.");
+                return;
+            }
+
+            const allAvailableChars = selectedPlayerNames.flatMap(name => {
+                const player = playerData.find(p => p.name === name);
+                return player.characters.map(char => ({
+                    player: player.name,
+                    ...char
+                }));
+            });
+
+            const run1 = findParty(allAvailableChars);
+            
+            if (!run1.success) {
+                renderError("Could not form a party.", "A complete party could not be formed with the selected people for Run 1. Try a different combination.");
+                return;
+            }
+
+            let run2 = null;
+            if (numRuns === 2) {
+                const usedCharNames = Object.values(run1.party).map(p => p.char.name);
+                const remainingChars = allAvailableChars.filter(char => !usedCharNames.includes(char.name));
+                run2 = findParty(remainingChars);
+            }
+            
+            renderResults(run1, run2);
+        }
+        
+        // This function attempts to find a valid party composition from a pool of characters
+        function findParty(characterPool) {
+            const party = {};
+            const assignedPlayers = new Set();
+            const assignedChars = new Set();
+
+            let pool = [...characterPool];
+            let slotsToFill = [...partySlots.map(s => s.role)];
+
+            // Helper to assign a character
+            const assign = (role, char) => {
+                // Find an empty slot for this role
+                const slotIndex = Object.keys(party).length;
+                party[slotIndex] = { role, char };
+                assignedPlayers.add(char.player);
+                assignedChars.add(char.name);
+                // Remove the filled role from the list
+                const roleIndex = slotsToFill.indexOf(role);
+                if (roleIndex > -1) {
+                    slotsToFill.splice(roleIndex, 1);
+                }
+            };
+            
+            // Pass 1: Handle unique providers for critical roles
+            const criticalRoles = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS', 'FI'];
+            for (const role of criticalRoles) {
+                const candidates = pool.filter(c => c.class === role && !assignedPlayers.has(c.player));
+                const uniqueProviders = [...new Set(candidates.map(c => c.player))];
+                if (uniqueProviders.length === 1) {
+                    const playerToAssign = uniqueProviders[0];
+                    const charToAssign = candidates.find(c => c.player === playerToAssign);
+                    assign(role, charToAssign);
+                }
+            }
+            
+            // Pass 2: Try to get a CW dagger
+            const cwCandidate = pool.find(c => c.special === 'CW' && slotsToFill.includes('DD') && !assignedPlayers.has(c.player));
+            if (cwCandidate) {
+                assign('DD', cwCandidate);
+            }
+            
+            // Pass 3: Fill remaining required slots
+            for (const role of slotsToFill.slice()) { // Use slice to copy, as we modify original
+                const candidate = pool.find(c => c.class === role && !assignedPlayers.has(c.player));
+                if (candidate) {
+                    assign(role, candidate);
+                }
+            }
+            
+            // Pass 4: Fill optional slot if we have 10 or more people selected
+            if (getSelectedPlayers().length >= 10) {
+                 const optionalCandidate = pool.find(c => optionalRoles.includes(c.class) && !assignedPlayers.has(c.player));
+                 if(optionalCandidate) {
+                    assign(optionalCandidate.class, optionalCandidate);
+                 }
+            }
+            
+            const success = partySlots.every(slot => 
+                Object.values(party).some(p => p.role === slot.role)
+            );
+
+            return { party, success };
+        }
+        
+        // --- Rendering ---
+        function renderResults(run1, run2) {
+            placeholder.classList.add('hidden');
+            resultsContainer.innerHTML = ''; // Clear previous results
+            resultsContainer.appendChild(createPartyCard('Run 1', run1));
+            
+            if (run2) {
+                 resultsContainer.appendChild(createPartyCard('Run 2', run2));
+            }
+        }
+        
+        function createPartyCard(title, runData) {
+            const card = document.createElement('div');
+            card.className = 'card rounded-lg p-6 shadow-lg';
+            
+            let content = `<h2 class="text-2xl font-bold mb-4 ${runData.success ? 'text-green-400' : 'text-red-400'}">${title} - ${runData.success ? 'Composition Found' : 'Failed to Form Party'}</h2>`;
+            
+            if (runData.success) {
+                const grid = document.createElement('div');
+                grid.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4';
+
+                // Sort party by a predefined order for consistent display
+                const displayOrder = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS', 'FI', 'DD', ...optionalRoles];
+                const sortedParty = Object.values(runData.party).sort((a, b) => {
+                    return displayOrder.indexOf(a.role) - displayOrder.indexOf(b.role);
+                });
+
+                sortedParty.forEach(({role, char}) => {
+                    const isOptional = optionalRoles.includes(role);
+                    const slotEl = document.createElement('div');
+                    slotEl.className = `p-3 rounded-lg flex items-center ${isOptional ? 'bg-indigo-900/40 border border-indigo-700' : 'bg-gray-800/50'}`;
+                    const playerNameLower = char.player.toLowerCase();
+                    
+                    slotEl.innerHTML = `
+                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-700 flex items-center justify-center overflow-hidden">
+                           <img src="pfps/${playerNameLower}.png" alt="${char.player}" class="w-full h-full object-cover" onerror="this.outerHTML='<div class=\\'w-full h-full flex items-center justify-center font-bold text-pink-400 text-sm party-slot-icon\\'>${role}</div>'">
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-md font-semibold text-white">${char.player}</p>
+                            <p class="text-sm text-gray-400">${char.class} (${char.name}) ${char.special === 'CW' ? '<span class="text-red-400 font-bold">(CW)</span>' : ''}</p>
+                        </div>
+                    `;
+                    grid.appendChild(slotEl);
+                });
+                card.innerHTML = content;
+                card.appendChild(grid);
+            } else {
+                 card.innerHTML = content + `<p class="text-gray-300">A complete party could not be formed from the remaining characters. Please try a different selection of people.</p>`;
+            }
+            return card;
+        }
+        
+        function renderError(title, message) {
+            placeholder.classList.add('hidden');
+            resultsContainer.innerHTML = '';
+            const errorCard = document.createElement('div');
+            errorCard.className = 'card rounded-lg p-8 text-center';
+            errorCard.innerHTML = `
+                 <svg class="mx-auto h-12 w-12 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <h3 class="mt-4 text-2xl font-bold text-red-400">${title}</h3>
+                <p class="mt-2 text-lg text-gray-300">${message}</p>
+            `;
+            resultsContainer.appendChild(errorCard);
+        }
+
+        // --- Start the app ---
+        document.addEventListener('DOMContentLoaded', initialize);
+    </script>
+</body>
+</html>
 
