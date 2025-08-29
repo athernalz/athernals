@@ -112,7 +112,7 @@
         </main>
     </div>
 
- <script>
+<script>
         const playerData = [
             { name: 'Ahra', characters: [{ name: 'ahra', class: 'Bishop' }, { name: 'Vitina', class: 'Bishop' }, { name: 'Bobicu', class: 'DD' }, { name: 'MaDRabbit', class: 'DD', special: 'CW' }, { name: 'Thalik', class: 'DD', special: 'CW' }, { name: 'Axylia', class: 'SWS' }, { name: 'Romeow', class: 'COV' }] },
             { name: 'Axylia', characters: [{ name: 'Axylia', class: 'SWS' }, { name: 'Romeow', class: 'COV' }] },
@@ -163,6 +163,44 @@
             return Array.from(document.querySelectorAll('.player-checkbox:checked')).map(cb => cb.dataset.name);
         }
         
+        // NEW FUNCTION: To create balanced party cores for a 2-run setup
+        function createBalancedInitialParties(characterPool) {
+            const initialParty1 = {};
+            const initialParty2 = {};
+            const assignedPlayers = new Set();
+
+            const assignToBalance = (char1, char2, role) => {
+                if (char1 && !assignedPlayers.has(char1.player)) {
+                    initialParty1[char1.player] = { role, char: char1 };
+                    assignedPlayers.add(char1.player);
+                }
+                if (char2 && !assignedPlayers.has(char2.player)) {
+                    initialParty2[char2.player] = { role, char: char2 };
+                    assignedPlayers.add(char2.player);
+                }
+            };
+            
+            // Split CWs
+            const cws = characterPool.filter(c => c.special === 'CW');
+            if (cws.length >= 2) assignToBalance(cws[0], cws[1], 'DD');
+
+            // Split high-strength DDs
+            const strongDDs = characterPool.filter(c => c.strength === 'high' && !assignedPlayers.has(c.player));
+            if (strongDDs.length >= 2) assignToBalance(strongDDs[0], strongDDs[1], 'DD');
+            
+            // Split essential support roles
+            const supportRoles = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS'];
+            supportRoles.forEach(role => {
+                const candidates = characterPool.filter(c => c.class === role && !assignedPlayers.has(c.player));
+                const uniquePlayers = [...new Map(candidates.map(c => [c.player, c])).values()];
+                if (uniquePlayers.length >= 2) {
+                    assignToBalance(uniquePlayers[0], uniquePlayers[1], role);
+                }
+            });
+
+            return { initialParty1, initialParty2 };
+        }
+
         function handleGeneration() {
             const selectedPlayerNames = getSelectedPlayers();
             const numRuns = parseInt(document.querySelector('input[name="runs"]:checked').value, 10);
@@ -184,52 +222,48 @@
             let run1 = null, run2 = null;
 
             if (numRuns === 2) {
-                const strongDdPool = allAvailableChars.filter(c => c.strength === 'high');
-                const cwPool = allAvailableChars.filter(c => c.special === 'CW');
-                const run1Limits = {
-                    maxCw: Math.ceil(cwPool.length / 2),
-                    maxStrongDDs: Math.ceil(strongDdPool.length / 2)
-                };
-
-                const supportRoles = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS'];
-                const criticalProviders = new Map();
-                for (const role of supportRoles) {
-                    const providers = [...new Set(allAvailableChars.filter(c => c.class === role).map(c => c.player))];
-                    if (providers.length <= 2 && providers.length > 0) { 
-                        providers.forEach(p => {
-                            if (!criticalProviders.has(p)) criticalProviders.set(p, []);
-                            criticalProviders.get(p).push(role);
-                        });
-                    }
-                }
+                const { initialParty1 } = createBalancedInitialParties(allAvailableChars);
                 
-                run1 = findParty(allAvailableChars, selectedPlayerNames, run1Limits, false, criticalProviders);
+                run1 = findParty(allAvailableChars, selectedPlayerNames, initialParty1);
                 
-                if (run1) { // Check if run1 was successfully generated before proceeding
+                if (run1) {
+                    const usedPlayerNamesRun1 = Object.keys(run1.party);
                     const usedCharNamesRun1 = Object.values(run1.party).map(p => p.char.name);
-                    const remainingChars = allAvailableChars.filter(char => !usedCharNamesRun1.includes(char.name));
-                    const playersForRun2 = [...new Set(remainingChars.map(c => c.player))];
 
-                    run2 = findParty(remainingChars, playersForRun2, {}, true, new Map());
+                    // For run 2, we can use anyone not in run 1, plus anyone from run 1 on an alt
+                    const remainingCharsForRun2 = allAvailableChars.filter(char => !usedCharNamesRun1.includes(char.name));
+                    const playersForRun2 = [...new Set(remainingCharsForRun2.map(c => c.player))];
+                    
+                    run2 = findParty(remainingCharsForRun2, playersForRun2, {});
                 }
+
             } else {
-                run1 = findParty(allAvailableChars, selectedPlayerNames, {}, true, new Map());
+                run1 = findParty(allAvailableChars, selectedPlayerNames, {});
             }
             
             renderResults(run1, run2, allAvailableChars);
         }
         
-        function findParty(characterPool, availablePlayerNames, limits = {}, isGreedy = true, criticalProviders = new Map()) {
-            const party = {};
+        function findParty(characterPool, availablePlayerNames, initialParty = {}) {
+            const party = { ...initialParty };
             
-            let cwCount = 0;
-            let strongDdCount = 0;
-            const { maxCw = Infinity, maxStrongDDs = Infinity } = limits;
+            // Derive initial state from the pre-filled party
+            let cwCount = Object.values(party).filter(p => p.char.special === 'CW').length;
+            let strongDdCount = Object.values(party).filter(p => p.char.strength === 'high').length;
+            
+            const supportRoles = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS'];
+            const neededSupportRoles = new Set(supportRoles);
+            Object.values(party).forEach(p => {
+                if (neededSupportRoles.has(p.role)) {
+                    neededSupportRoles.delete(p.role);
+                }
+            });
+
+            let neededDamageRoles = 4 - Object.values(party).filter(p => ['DD', 'FI'].includes(p.role)).length;
+
 
             const canAssign = (char) => {
                 if (party[char.player] || Object.values(party).some(p => p.char.name === char.name)) return false;
-                if (char.special === 'CW' && cwCount >= maxCw) return false;
-                if (char.strength === 'high' && strongDdCount >= maxStrongDDs) return false;
                 if (char.shareGroup && Object.values(party).some(p => p.char.shareGroup === char.shareGroup)) return false;
                 return true;
             };
@@ -240,59 +274,35 @@
                 if (char.strength === 'high') strongDdCount++;
             };
             
-            const supportRoles = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS'];
-            const neededSupportRoles = new Set(supportRoles);
-            let neededDamageRoles = 4;
-
-            // Pass 1: Assign ALL mains to their role if possible.
-            characterPool.forEach(char => {
-                if (!char.isMain || !canAssign(char)) return;
-
-                if (neededSupportRoles.has(char.class)) {
-                    assign(char.class, char);
-                    neededSupportRoles.delete(char.class);
-                } else if (char.class === 'FI' && neededDamageRoles > 0) {
-                    assign('FI', char);
-                    neededDamageRoles--;
-                } else if (char.class === 'DD' && neededDamageRoles > 0) {
-                    assign('DD', char);
-                    neededDamageRoles--;
+            // Pass 1: Prioritize assigning mains for required roles, starting with supports.
+            const mainChars = characterPool.filter(c => c.isMain && canAssign(c));
+            
+            // 1a: Support Mains
+            mainChars.filter(c => neededSupportRoles.has(c.class)).forEach(char => {
+                if (canAssign(char) && neededSupportRoles.has(char.class)) {
+                     assign(char.class, char);
+                     neededSupportRoles.delete(char.class);
+                }
+            });
+            // 1b: Damage Mains
+            mainChars.filter(c => ['FI', 'DD'].includes(c.class)).forEach(char => {
+                if (canAssign(char) && neededDamageRoles > 0) {
+                     assign(char.class, char);
+                     neededDamageRoles--;
                 }
             });
 
-            // Pass 2: Fill remaining essential support roles.
+
+            // Pass 2: Fill remaining essential support roles from alts.
             for (const role of [...neededSupportRoles]) {
                 const candidates = characterPool.filter(c => c.class === role && canAssign(c));
-                if (candidates.length === 0) continue;
-
-                // Specific COV strategy for Run 1
-                if (role === 'COV' && !isGreedy) {
-                    // FIX 1: Corrected property access from c.char.name to c.name
-                    const humaxCov = candidates.find(c => c.name === 'Humax');
-                    if (humaxCov) { 
-                        assign(role, humaxCov);
-                    } else { // Fallback to standard logic if Humax COV not available
-                        const romeowCov = candidates.find(c => c.name === 'Romeow');
-                        if (candidates.length > 1 && romeowCov) {
-                           const otherCov = candidates.find(c => c.name !== 'Romeow');
-                           if(otherCov) assign(role, otherCov);
-                           else assign(role, romeowCov);
-                        } else if (candidates.length > 0) {
-                           assign(role, candidates[0]);
-                        }
-                    }
-                } else { // Standard logic for other roles/runs
-                    candidates.sort((a, b) => {
-                        const scoreA = (criticalProviders.has(a.player) ? 0 : 5);
-                        const scoreB = (criticalProviders.has(b.player) ? 0 : 5);
-                        return scoreB - scoreA;
-                    });
+                if (candidates.length > 0) {
                     assign(role, candidates[0]);
+                    neededSupportRoles.delete(role);
                 }
-                neededSupportRoles.delete(role);
             }
 
-            // Pass 3: Fill remaining damage roles.
+            // Pass 3: Fill remaining damage roles from alts.
             if (neededDamageRoles > 0 && !Object.values(party).some(p => p.role === 'FI')) {
                 const fiCandidates = characterPool.filter(c => c.class === 'FI' && canAssign(c));
                 if (fiCandidates.length > 0) {
@@ -301,44 +311,22 @@
                 }
             }
             
-            // FIX 2: New logic for selecting DDs to avoid multiple CWs in single runs
             while(neededDamageRoles > 0) {
                 const ddCandidates = characterPool.filter(c => c.class === 'DD' && canAssign(c));
                 if (ddCandidates.length === 0) break; 
 
-                let bestCandidate;
-
-                // For single runs (isGreedy=true), avoid a second CW if other options exist.
-                if (isGreedy && cwCount >= 1) {
-                    const nonCwCandidates = ddCandidates.filter(c => c.special !== 'CW');
-                    if (nonCwCandidates.length > 0) {
-                        // Prioritize high strength among the non-CWs
-                        nonCwCandidates.sort((a,b) => (b.strength === 'high' ? 1 : 0) - (a.strength === 'high' ? 1 : 0));
-                        bestCandidate = nonCwCandidates[0];
-                    } else {
-                        // No other choice, must pick another CW. Prioritize high strength.
-                        ddCandidates.sort((a,b) => (b.strength === 'high' ? 1 : 0) - (a.strength === 'high' ? 1 : 0));
-                        bestCandidate = ddCandidates[0];
-                    }
-                } else {
-                    // Original logic for 2-run scenarios: prioritize strong DDs, then CWs
-                    ddCandidates.sort((a, b) => {
-                        const scoreA = (a.strength === 'high' ? 10 : 0) + (a.special === 'CW' ? 5 : 0);
-                        const scoreB = (b.strength === 'high' ? 10 : 0) + (b.special === 'CW' ? 5 : 0);
-                        return scoreB - scoreA;
-                    });
-                    bestCandidate = ddCandidates[0];
-                }
-
-                if (bestCandidate) {
-                    assign('DD', bestCandidate);
-                    neededDamageRoles--;
-                } else {
-                    break; // No suitable candidate found
-                }
+                // Prioritize high strength, then CW, then regular
+                ddCandidates.sort((a, b) => {
+                    const scoreA = (a.strength === 'high' ? 10 : 0) + (a.special === 'CW' ? 5 : 0);
+                    const scoreB = (b.strength === 'high' ? 10 : 0) + (b.special === 'CW' ? 5 : 0);
+                    return scoreB - scoreA;
+                });
+                
+                assign('DD', ddCandidates[0]);
+                neededDamageRoles--;
             }
 
-            // Pass 4: Try to add optional members (even in run 1 if possible)
+            // Pass 4: Try to add optional members
             const isFullParty = Object.keys(party).length >= 9 && neededSupportRoles.size === 0 && neededDamageRoles <= 0;
             if (isFullParty) {
                 let optionalCandidate = null;
@@ -352,11 +340,6 @@
                     optionalCandidate = characterPool.find(c => optionalRoles.includes(c.class) && canAssign(c));
                 }
                 if (optionalCandidate) assign(optionalCandidate.class, optionalCandidate);
-
-                if (Object.keys(party).length >= 10) {
-                       const extraDdCandidate = characterPool.find(c => c.class === 'DD' && canAssign(c));
-                       if(extraDdCandidate) assign('DD', extraDdCandidate);
-                }
             }
             
             const filledSupports = Object.values(party).filter(p => supportRoles.includes(p.role));
@@ -368,13 +351,12 @@
                 supportRoles.forEach(role => {
                     if (!filledSupports.some(p => p.role === role)) missingRoles.push(role);
                 });
-                const neededDDs = 4 - filledDamage.length;
-                if (neededDDs > 0 && !filledDamage.some(p => p.role === 'FI') && !missingRoles.includes('FI')) {
+                let neededDDs = 4 - filledDamage.length;
+                if(neededDDs > 0 && !Object.values(party).some(p => p.role === 'FI')){
                     missingRoles.push('DD/FI');
-                    for (let i = 0; i < neededDDs -1; i++) missingRoles.push('DD');
-                } else {
-                    for (let i = 0; i < neededDDs; i++) missingRoles.push('DD');
+                    neededDDs--;
                 }
+                for (let i = 0; i < neededDDs; i++) missingRoles.push('DD');
             }
             
             const assignedPlayerNames = Object.keys(party);
