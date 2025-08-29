@@ -53,7 +53,9 @@
 <body class="min-h-screen flex items-center justify-center p-4">
     <div class="w-full max-w-6xl mx-auto">
         <header class="text-center mb-8">
-            <h1 class="text-4xl md:text-5xl font-bold text-white tracking-wider">Zaken Generator</h1>
+            <h1 class="text-4xl md:text-5xl font-bold text-white tracking-wider">
+                Zaken Generator <span class="text-lg align-middle text-gray-500 font-medium">v1.9</span>
+            </h1>
         </header>
 
         <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -203,15 +205,13 @@
                 
                 run1 = findParty(allAvailableChars, selectedPlayerNames, run1Limits, false, criticalProviders);
                 
-                const usedPlayersRun1 = Object.keys(run1.party);
                 const usedCharNamesRun1 = Object.values(run1.party).map(p => p.char.name);
+                
+                // For run 2, we use all characters that were not used in run 1.
+                // Players from run 1 are available again, just not on the same character.
+                const remainingChars = allAvailableChars.filter(char => !usedCharNamesRun1.includes(char.name));
 
-                const remainingChars = allAvailableChars.filter(char => {
-                    return !usedCharNamesRun1.includes(char.name) && !usedPlayersRun1.includes(char.player);
-                });
-                const remainingPlayerNames = availablePlayerNames.filter(p => !usedPlayersRun1.includes(p));
-
-                run2 = findParty(remainingChars, remainingPlayerNames, {}, true, new Map());
+                run2 = findParty(remainingChars, selectedPlayerNames, {}, true, new Map());
             } else {
                 run1 = findParty(allAvailableChars, selectedPlayerNames, {}, true, new Map());
             }
@@ -268,15 +268,17 @@
                 // Specific COV strategy for Run 1
                 if (role === 'COV' && !isGreedy) {
                     const humaxCov = candidates.find(c => c.char.name === 'Humax');
-                    const romeowCov = candidates.find(c => c.char.name === 'Romeow');
-                    if (humaxCov) { // Prioritize Humax
+                    if (humaxCov) { 
                         assign(role, humaxCov);
-                    } else if (candidates.length > 1 && romeowCov) { // Avoid Romeow if other options exist
-                        const otherCov = candidates.find(c => c.char.name !== 'Romeow');
-                        if (otherCov) assign(role, otherCov);
-                        else assign(role, romeowCov); // Use Romeow as last resort
-                    } else if (candidates.length > 0) {
-                        assign(role, candidates[0]);
+                    } else { // Fallback to standard logic if Humax COV not available
+                        const romeowCov = candidates.find(c => c.char.name === 'Romeow');
+                        if (candidates.length > 1 && romeowCov) {
+                           const otherCov = candidates.find(c => c.char.name !== 'Romeow');
+                           if(otherCov) assign(role, otherCov);
+                           else assign(role, romeowCov);
+                        } else if (candidates.length > 0) {
+                           assign(role, candidates[0]);
+                        }
                     }
                 } else { // Standard logic for other roles/runs
                     candidates.sort((a, b) => {
@@ -357,8 +359,7 @@
             let remainingForRun2 = allChars;
             if (run1) {
                 const run1UsedChars = Object.values(run1.party).map(p => p.char.name);
-                const run1UsedPlayers = Object.keys(run1.party);
-                remainingForRun2 = allChars.filter(c => !run1UsedChars.includes(c.name) && !run1UsedPlayers.includes(c.player));
+                remainingForRun2 = allChars.filter(c => !run1UsedChars.includes(c.name));
                 resultsContainer.appendChild(createPartyCard('Run 1', run1, allChars));
             }
             if (run2) {
@@ -410,13 +411,14 @@
             // Available Characters Section
             const partyPlayerNames = Object.keys(runData.party);
             const partyCharNames = Object.values(runData.party).map(p => p.char.name);
-            const availableChars = characterPool.filter(c => !partyPlayerNames.includes(c.player) && !partyCharNames.includes(c.name));
+            const availableChars = characterPool.filter(c => !partyCharNames.includes(c.name));
+
 
             const availableCharsSection = document.createElement('div');
             availableCharsSection.className = 'mt-6';
             
-            if (availableChars.length > 0) {
-                availableCharsSection.innerHTML = `
+            if (characterPool.length > partyCharNames.length) {
+                 availableCharsSection.innerHTML = `
                     <button class="show-available-btn btn-secondary text-white font-semibold py-2 px-4 rounded-md text-sm w-full">Show Available Characters</button>
                     <div class="available-chars-list hidden mt-4 p-4 bg-gray-900/50 rounded-lg max-h-48 overflow-y-auto"></div>
                 `;
@@ -440,7 +442,8 @@
                     const isHidden = listContainer.classList.contains('hidden');
                     
                     if (isHidden) {
-                        const groupedByPlayer = availableChars.reduce((acc, char) => {
+                        const availableForThisContext = characterPool.filter(c => !partyCharNames.includes(c.name));
+                        const groupedByPlayer = availableForThisContext.reduce((acc, char) => {
                             if (!acc[char.player]) acc[char.player] = [];
                             acc[char.player].push(char);
                             return acc;
@@ -448,6 +451,7 @@
 
                         let listHtml = '<ul class="space-y-2">';
                         for (const player in groupedByPlayer) {
+                             if(partyPlayerNames.includes(player)) continue;
                             const charsString = groupedByPlayer[player].map(c => `${c.name} (${c.class})`).join(', ');
                             listHtml += `<li><span class="font-bold text-white">${player}:</span> <span class="text-gray-300">${charsString}</span></li>`;
                         }
