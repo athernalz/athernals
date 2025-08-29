@@ -105,7 +105,7 @@
 
     <script>
         const playerData = [
-            { name: 'Ahra', characters: [{ name: 'ahra', class: 'Bishop' }, { name: 'Vitina', class: 'Bishop' }, { name: 'Bobicu', class: 'DD' }, { name: 'MaDRabbit', class: 'DD', special: 'CW' }, { name: 'Thalik', class: 'DD', special: 'CW' }, { name: 'Axylia', class: 'SWS' }] },
+            { name: 'Ahra', characters: [{ name: 'ahra', class: 'Bishop' }, { name: 'Vitina', class: 'Bishop' }, { name: 'Bobicu', class: 'DD' }, { name: 'MaDRabbit', class: 'DD', special: 'CW' }, { name: 'Thalik', class: 'DD', special: 'CW' }, { name: 'Axylia', class: 'SWS' }, { name: 'Romeow', class: 'COV' }] },
             { name: 'Axylia', characters: [{ name: 'Axylia', class: 'SWS' }, { name: 'Romeow', class: 'COV' }] },
             { name: 'Bobicu', characters: [{ name: 'Bobicu', class: 'DD', strength: 'high' }, { name: 'IWontHitYou', class: 'DD', shareGroup: 'A' }, { name: 'Axylia', class: 'SWS' }, { name: 'ahra', class: 'Bishop' }, { name: 'Vitina', class: 'Bishop' }, { name: 'MyDance', class: 'Recharger' }, { name: 'MyDance', class: 'BD' }] },
             { name: 'iKiku', characters: [{ name: 'iKiku', class: 'FI' }, { name: 'LaaLaa', class: 'SWS' }] },
@@ -216,84 +216,96 @@
             let strongDdCount = 0;
             const { maxCw = Infinity, maxStrongDDs = Infinity } = limits;
 
-            const canAssign = (char, currentParty) => {
+            const canAssign = (char) => {
                 if (assignedPlayers.has(char.player) || assignedChars.has(char.name)) return false;
                 if (char.special === 'CW' && cwCount >= maxCw) return false;
                 if (char.strength === 'high' && strongDdCount >= maxStrongDDs) return false;
-                if (char.shareGroup) {
-                    if (Object.values(currentParty).some(p => p.char.shareGroup === char.shareGroup)) return false;
-                }
+                if (char.shareGroup && Object.values(party).some(p => p.char.shareGroup === char.shareGroup)) return false;
                 return true;
             };
-
+            
             const assign = (role, char) => {
-                party[Object.keys(party).length] = { role, char };
+                party[char.player] = { role, char }; // Use player name as key to prevent duplicates
                 assignedPlayers.add(char.player);
                 assignedChars.add(char.name);
                 if (char.special === 'CW') cwCount++;
                 if (char.strength === 'high') strongDdCount++;
             };
-
-            const supportRoles = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS'];
             
-            // Pass 1: Fill required support roles (mains first)
-            for (const role of supportRoles) {
-                 let candidate = characterPool.find(c => c.class === role && c.isMain && canAssign(c, party));
-                 if (candidate) assign(role, candidate);
-            }
-            // Fill remaining supports (any character)
-            for (const role of supportRoles) {
-                if(Object.values(party).some(p => p.role === role)) continue;
-                let candidate = characterPool.find(c => c.class === role && canAssign(c, party));
-                if (candidate) assign(role, candidate);
-            }
+            const supportRoles = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS'];
+            const neededSupportRoles = new Set(supportRoles);
 
-            // Pass 2: Fill 4 damage dealer slots
-            let damageSlotsToFill = 4;
+            // Pass 1: Assign mains to their preferred roles (Supports + DDs)
+            characterPool.forEach(char => {
+                if (char.isMain && canAssign(char)) {
+                    if (supportRoles.includes(char.class) && neededSupportRoles.has(char.class)) {
+                        assign(char.class, char);
+                        neededSupportRoles.delete(char.class);
+                    }
+                }
+            });
 
-            // Sub-pass 2a: Try to get an FI
-            if (damageSlotsToFill > 0) {
-                const fiCandidates = characterPool.filter(c => c.class === 'FI' && canAssign(c, party));
-                fiCandidates.sort((a,b) => (criticalProviders.has(a.player) ? 1 : 0) - (criticalProviders.has(b.player) ? 1 : 0));
-                if (fiCandidates.length > 0) {
-                    assign('FI', fiCandidates[0]);
-                    damageSlotsToFill--;
+            // Pass 2: Fill remaining essential support roles
+            for (const role of [...neededSupportRoles]) {
+                const candidates = characterPool.filter(c => c.class === role && canAssign(c));
+                // Prioritize candidates who are NOT critical providers for other roles
+                candidates.sort((a, b) => (criticalProviders.has(a.player) ? 1 : -1) - (criticalProviders.has(b.player) ? 1 : -1));
+                if (candidates.length > 0) {
+                    assign(role, candidates[0]);
+                    neededSupportRoles.delete(role);
                 }
             }
 
-            // Sub-pass 2b: Fill remaining slots with DDs
-            const ddCandidates = characterPool.filter(c => c.class === 'DD' && canAssign(c, party));
-            ddCandidates.sort((a, b) => {
-                const aIsCritical = criticalProviders.has(a.player);
-                const bIsCritical = criticalProviders.has(b.player);
-                const aHasCW = a.special === 'CW';
-                const bHasCW = b.special === 'CW';
-                if (aIsCritical !== bIsCritical) return aIsCritical ? 1 : -1;
-                if (aHasCW !== bHasCW) return aHasCW ? -1 : 1;
-                return 0;
+            // Pass 3: Fill damage dealer slots (up to 4, including FI)
+            const filledDamageCount = () => Object.values(party).filter(p => ['DD', 'FI'].includes(p.role)).length;
+            const neededDamageSlots = () => 4 - filledDamageCount();
+
+            // 3a: Prioritize an FI
+            if (neededDamageSlots() > 0) {
+                const fiCandidates = characterPool.filter(c => c.class === 'FI' && canAssign(c));
+                if (fiCandidates.length > 0) {
+                    assign('FI', fiCandidates[0]);
+                }
+            }
+
+            // 3b: Add main DDs who weren't assigned yet
+            characterPool.forEach(char => {
+                if (neededDamageSlots() > 0 && char.isMain && char.class === 'DD' && canAssign(char)) {
+                    assign('DD', char);
+                }
             });
 
-            for (let i = 0; i < damageSlotsToFill; i++) {
-                if (ddCandidates.length > 0) assign('DD', ddCandidates.shift());
+            // 3c: Fill remaining damage slots with best available DDs
+            while(neededDamageSlots() > 0) {
+                const ddCandidates = characterPool.filter(c => c.class === 'DD' && canAssign(c));
+                if (ddCandidates.length === 0) break; // No more DDs
+
+                // Sort by CW > Not Critical Provider > regular
+                ddCandidates.sort((a, b) => {
+                    const scoreA = (a.special === 'CW' ? 10 : 0) + (criticalProviders.has(a.player) ? 0 : 5);
+                    const scoreB = (b.special === 'CW' ? 10 : 0) + (criticalProviders.has(b.player) ? 0 : 5);
+                    return scoreB - scoreA;
+                });
+                assign('DD', ddCandidates[0]);
             }
             
-            // Pass 3: Greedy optional members
+            // Pass 4: Greedy optional members
             if (isGreedy) {
                 if (Object.keys(party).length >= 9) {
                      let optionalCandidate = null;
                      if (Object.values(party).some(p=>p.role === 'Bishop')) {
-                        optionalCandidate = characterPool.find(c => c.player === 'Galena' && optionalRoles.includes(c.class) && canAssign(c, party));
+                        optionalCandidate = characterPool.find(c => c.player === 'Galena' && optionalRoles.includes(c.class) && canAssign(c));
                      }
                      if (!optionalCandidate && Object.values(party).some(p=>p.role === 'FI')) {
-                        optionalCandidate = characterPool.find(c => c.player === 'Pap1ll0n' && optionalRoles.includes(c.class) && canAssign(c, party));
+                        optionalCandidate = characterPool.find(c => c.player === 'Pap1ll0n' && optionalRoles.includes(c.class) && canAssign(c));
                      }
                      if (!optionalCandidate) {
-                        optionalCandidate = characterPool.find(c => optionalRoles.includes(c.class) && canAssign(c, party));
+                        optionalCandidate = characterPool.find(c => optionalRoles.includes(c.class) && canAssign(c));
                      }
                      if (optionalCandidate) assign(optionalCandidate.class, optionalCandidate);
                 }
                 if (Object.keys(party).length >= 10) {
-                    const extraDdCandidate = characterPool.find(c => c.class === 'DD' && canAssign(c, party));
+                    const extraDdCandidate = characterPool.find(c => c.class === 'DD' && canAssign(c));
                     if(extraDdCandidate) assign('DD', extraDdCandidate);
                 }
             }
