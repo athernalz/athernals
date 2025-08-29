@@ -197,22 +197,10 @@
             let run2 = null;
             if (numRuns === 2) {
                 const usedCharNamesRun1 = Object.values(run1.party).map(p => p.char.name);
-                const usedPlayersRun1 = [...new Set(Object.values(run1.party).map(p => p.char.player))];
                 
                 const remainingChars = allAvailableChars.filter(char => !usedCharNamesRun1.includes(char.name));
-                // For run 2, all selected players are potentially available again, minus those who only have one char that was used in run 1
-                const playersInRun1 = new Set(usedPlayersRun1);
-                const charsInRun1 = new Set(usedCharNamesRun1);
-
-                const availableForRun2 = selectedPlayerNames.filter(playerName => {
-                    // if player wasn't in run 1, they are available
-                    if (!playersInRun1.has(playerName)) return true;
-                    // if player was in run 1, check if they have any unused characters
-                    const pData = playerData.find(p => p.name === playerName);
-                    return pData.characters.some(char => !charsInRun1.has(char.name));
-                });
-                
-                run2 = findParty(remainingChars, availableForRun2);
+                // For run 2, all selected players are potentially available again
+                run2 = findParty(remainingChars, selectedPlayerNames);
             }
             
             renderResults(run1, run2);
@@ -242,7 +230,7 @@
             // Pass 1: Handle unique providers for critical roles
             const criticalRoles = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS', 'FI'];
             for (const role of criticalRoles) {
-                const candidates = pool.filter(c => c.class === role && !assignedPlayers.has(c.player));
+                const candidates = pool.filter(c => c.class === role && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
                 const uniqueProviders = [...new Set(candidates.map(c => c.player))];
                 if (uniqueProviders.length === 1) {
                     const playerToAssign = uniqueProviders[0];
@@ -252,14 +240,14 @@
             }
             
             // Pass 2: Try to get a CW dagger
-            const cwCandidate = pool.find(c => c.special === 'CW' && slotsToFill.includes('DD') && !assignedPlayers.has(c.player));
+            const cwCandidate = pool.find(c => c.special === 'CW' && slotsToFill.includes('DD') && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
             if (cwCandidate) {
                 assign('DD', cwCandidate);
             }
             
             // Pass 3: Fill remaining required slots
             for (const role of slotsToFill.slice()) { // Use slice to copy, as we modify original
-                const candidate = pool.find(c => c.class === role && !assignedPlayers.has(c.player));
+                const candidate = pool.find(c => c.class === role && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
                 if (candidate) {
                     assign(role, candidate);
                 }
@@ -273,17 +261,17 @@
                  
                  // Prioritize Galena if Bishop is taken
                  if(isBishopFilled) {
-                    optionalCandidate = pool.find(c => c.player === 'Galena' && optionalRoles.includes(c.class) && !assignedPlayers.has(c.player));
+                    optionalCandidate = pool.find(c => c.player === 'Galena' && optionalRoles.includes(c.class) && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
                  }
                  
                  // Prioritize Pap1ll0n if FI is taken and Galena wasn't chosen
                  if(!optionalCandidate && isFiFilled) {
-                    optionalCandidate = pool.find(c => c.player === 'Pap1ll0n' && optionalRoles.includes(c.class) && !assignedPlayers.has(c.player));
+                    optionalCandidate = pool.find(c => c.player === 'Pap1ll0n' && optionalRoles.includes(c.class) && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
                  }
 
                  // If no priority candidate, find any
                  if(!optionalCandidate) {
-                    optionalCandidate = pool.find(c => optionalRoles.includes(c.class) && !assignedPlayers.has(c.player));
+                    optionalCandidate = pool.find(c => optionalRoles.includes(c.class) && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
                  }
 
                  if(optionalCandidate) {
@@ -293,7 +281,7 @@
             
             // Pass 5: 11th member (extra DD)
             if (Object.keys(party).length >= 10) {
-                const extraDdCandidate = pool.find(c => c.class === 'DD' && !assignedPlayers.has(c.player));
+                const extraDdCandidate = pool.find(c => c.class === 'DD' && !assignedPlayers.has(c.player) && !assignedChars.has(c.name));
                 if(extraDdCandidate) {
                     assign('DD', extraDdCandidate);
                 }
