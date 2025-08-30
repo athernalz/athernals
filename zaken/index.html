@@ -59,19 +59,15 @@
         </header>
 
         <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <!-- Controls Column -->
             <div class="lg:col-span-1 card rounded-lg p-6 shadow-lg">
                 <div id="controls">
-                    <!-- People Selection -->
                     <div>
                         <h2 class="text-xl font-semibold mb-3 border-b-2 border-gray-600 pb-2">1. Select Available People</h2>
                         <div id="player-list" class="grid grid-cols-3 gap-2 max-h-[30rem] overflow-y-auto pr-2">
-                            <!-- Player cards will be injected here -->
-                        </div>
+                            </div>
                         <p class="mt-4 text-lg font-medium">Selected People: <span id="selected-count" class="font-bold text-white">0</span></p>
                     </div>
 
-                    <!-- Run Selection -->
                     <div class="mt-6">
                         <h2 class="text-xl font-semibold mb-3 border-b-2 border-gray-600 pb-2">2. Select Number of Runs</h2>
                         <div class="flex items-center space-x-6">
@@ -86,7 +82,6 @@
                         </div>
                     </div>
 
-                    <!-- Generate Button -->
                     <div class="mt-8">
                          <button id="generate-btn" class="w-full btn-primary text-white font-bold py-3 px-4 rounded-lg text-lg shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-300">
                             Generate Party
@@ -95,10 +90,8 @@
                 </div>
             </div>
 
-            <!-- Results Column -->
             <div id="results-container" class="lg:col-span-2 space-y-6">
-                 <!-- Placeholder -->
-                <div id="placeholder" class="card rounded-lg p-8 h-full flex items-center justify-center text-center">
+                 <div id="placeholder" class="card rounded-lg p-8 h-full flex items-center justify-center text-center">
                     <div>
                         <svg class="mx-auto h-16 w-16 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                             <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -107,13 +100,11 @@
                         <p class="mt-1 text-gray-400">Select at least 9 people and click generate.</p>
                     </div>
                 </div>
-                <!-- Generated parties will be injected here -->
-            </div>
+                </div>
         </main>
     </div>
 
-<script>
-        const <script>
+    <script>
         const playerData = [
             { name: 'Ahra', characters: [{ name: 'ahra', class: 'Bishop' }, { name: 'Vitina', class: 'Bishop' }, { name: 'Bobicu', class: 'DD' }, { name: 'MaDRabbit', class: 'DD', special: 'CW' }, { name: 'Thalik', class: 'DD', special: 'CW' }, { name: 'Axylia', class: 'SWS' }, { name: 'Romeow', class: 'COV' }] },
             { name: 'Axylia', characters: [{ name: 'Axylia', class: 'SWS' }, { name: 'Romeow', class: 'COV' }] },
@@ -490,4 +481,3 @@
     </script>
 </body>
 </html>
-
