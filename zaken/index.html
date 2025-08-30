@@ -256,8 +256,18 @@
                 neededSupportRoles.delete('Bishop');
             }
 
-            // Pass 2: If balancing for Run 1, prioritize the FI Synergy case
+            // Pass 2: If balancing for Run 1, handle special strategic priorities
             if (isBalancingRun1) {
+                // NEW: Prioritize MrA on COV for Run 1
+                if (neededSupportRoles.has('COV')) {
+                    const mraAsCov = characterPool.find(c => c.player === 'MrA' && c.name === 'Humax' && c.class === 'COV');
+                    if (canAssign(mraAsCov)) {
+                        assign('COV', mraAsCov);
+                        neededSupportRoles.delete('COV');
+                    }
+                }
+
+                // Prioritize the FI Synergy case
                 const fiMain = characterPool.find(c => c.class === 'FI' && c.isMain && canAssign(c));
                 if (fiMain) {
                     assign('FI', fiMain);
@@ -270,8 +280,7 @@
                 }
             }
             
-            // Pass 3: Fill remaining support roles using a two-pass "critical main" system
-            // 3a: Assign "Critical Mains" - players who are the ONLY main for a needed support role.
+            // Pass 3: Fill remaining support roles with "critical mains" first
             for (const role of [...neededSupportRoles]) {
                 const mainCandidatesForRole = characterPool.filter(c => c.class === role && c.isMain && canAssign(c));
                 const uniquePlayers = [...new Set(mainCandidatesForRole.map(c => c.player))];
@@ -284,7 +293,6 @@
                 }
             }
 
-            // 3b: Fill remaining support roles with the best available candidates.
             for (const role of [...neededSupportRoles]) {
                 const candidates = characterPool.filter(c => c.class === role && canAssign(c));
                 const best = getBestCandidate(candidates);
@@ -358,14 +366,13 @@
             placeholder.classList.add('hidden');
             resultsContainer.innerHTML = '';
             
-            let run1UsedChars = []; // CORRECTED: Declare variable in a shared scope
+            let run1UsedChars = [];
 
             if (run1) {
                 run1UsedChars = Object.values(run1.party).map(p => p.char.name);
                 resultsContainer.appendChild(createPartyCard('Run 1', run1, allChars));
             }
             if (run2) {
-                // Now this can safely access run1UsedChars
                 const remainingForRun2Context = allChars.filter(c => !run1UsedChars.includes(c.name));
                 resultsContainer.appendChild(createPartyCard('Run 2', run2, remainingForRun2Context));
             }
