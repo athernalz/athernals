@@ -195,11 +195,12 @@
                 
                 if (run1) {
                     const usedCharNamesRun1 = Object.values(run1.party).map(p => p.char.name);
-                    const usedShareGroupsRun1 = Object.values(run1.party).map(p => p.char.shareGroup).filter(Boolean);
+                    
+                    // CORRECTED LOGIC: Shared weapon group only matters WITHIN a party, not between runs.
                     const remainingChars = allAvailableChars.filter(char => 
-                        !usedCharNamesRun1.includes(char.name) && 
-                        !usedShareGroupsRun1.includes(char.shareGroup)
+                        !usedCharNamesRun1.includes(char.name)
                     );
+                    
                     const playersForRun2 = [...new Set(remainingChars.map(c => c.player))];
                     run2 = findParty(remainingChars, playersForRun2, {}, false);
                 }
@@ -279,7 +280,6 @@
             // 3a: Assign "Critical Mains" - players who are the ONLY main for a needed support role.
             for (const role of [...neededSupportRoles]) {
                 const mainCandidatesForRole = characterPool.filter(c => c.class === role && c.isMain && canAssign(c));
-                // Find unique players for these mains
                 const uniquePlayers = [...new Set(mainCandidatesForRole.map(c => c.player))];
                 if (uniquePlayers.length === 1) {
                     const criticalMain = mainCandidatesForRole[0];
@@ -368,12 +368,13 @@
             let remainingForRun2 = allChars;
             if (run1) {
                 const run1UsedChars = Object.values(run1.party).map(p => p.char.name);
-                const usedShareGroupsRun1 = Object.values(run1.party).map(p => p.char.shareGroup).filter(Boolean);
-                remainingForRun2 = allChars.filter(c => !run1UsedChars.includes(c.name) && !usedShareGroupsRun1.includes(c.shareGroup));
+                remainingForRun2 = allChars.filter(c => !run1UsedChars.includes(c.name));
                 resultsContainer.appendChild(createPartyCard('Run 1', run1, allChars));
             }
             if (run2) {
-                resultsContainer.appendChild(createPartyCard('Run 2', run2, remainingForRun2));
+                const run2UsedChars = Object.values(run2.party).map(p => p.char.name);
+                const remainingForRun2Context = allChars.filter(c => !run1UsedChars.includes(c.name));
+                resultsContainer.appendChild(createPartyCard('Run 2', run2, remainingForRun2Context));
             }
         }
         
@@ -483,7 +484,7 @@
             const errorCard = document.createElement('div');
             errorCard.className = 'card rounded-lg p-8 text-center';
             errorCard.innerHTML = `
-                 <svg class="mx-auto h-12 w-12 text-red-400" fill="none" viewBox="0 0 24" stroke="currentColor" aria-hidden="true">
+                 <svg class="mx-auto h-12 w-12 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
                 <h3 class="mt-4 text-2xl font-bold text-red-400">${title}</h3>
