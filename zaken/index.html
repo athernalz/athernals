@@ -164,7 +164,6 @@
                 return;
             }
 
-            // NEW: Add isMain and classAffinity properties
             const playerMains = new Map();
             const allAvailableChars = selectedPlayerNames.flatMap(name => {
                 const player = playerData.find(p => p.name === name);
@@ -235,10 +234,11 @@
 
             const getBestCandidate = (candidates) => {
                 if (!candidates || candidates.length === 0) return null;
+                // Sort by main, then by class affinity
                 candidates.sort((a, b) => {
                     if (a.isMain !== b.isMain) return a.isMain ? -1 : 1;
                     if (a.classAffinity !== b.classAffinity) return a.classAffinity ? -1 : 1;
-                    return 0;
+                    return 0; // Keep original order if equal
                 });
                 return candidates[0];
             };
@@ -275,18 +275,32 @@
                 }
             }
             
-            // Pass 3: Fill remaining core roles, prioritizing Mains and Class Affinity
-            for (const role of supportRoles) {
-                if (neededSupportRoles.has(role)) {
-                    const candidates = characterPool.filter(c => c.class === role && canAssign(c));
-                    const best = getBestCandidate(candidates);
-                    if (best) {
-                        assign(role, best);
+            // Pass 3: Fill remaining support roles using a two-pass "critical main" system
+            // 3a: Assign "Critical Mains" - players who are the ONLY main for a needed support role.
+            for (const role of [...neededSupportRoles]) {
+                const mainCandidatesForRole = characterPool.filter(c => c.class === role && c.isMain && canAssign(c));
+                // Find unique players for these mains
+                const uniquePlayers = [...new Set(mainCandidatesForRole.map(c => c.player))];
+                if (uniquePlayers.length === 1) {
+                    const criticalMain = mainCandidatesForRole[0];
+                    if (canAssign(criticalMain)) {
+                        assign(role, criticalMain);
                         neededSupportRoles.delete(role);
                     }
                 }
             }
 
+            // 3b: Fill remaining support roles with the best available candidates (other mains or alts).
+            for (const role of [...neededSupportRoles]) {
+                const candidates = characterPool.filter(c => c.class === role && canAssign(c));
+                const best = getBestCandidate(candidates);
+                if (best) {
+                    assign(role, best);
+                    neededSupportRoles.delete(role);
+                }
+            }
+
+            // Pass 4: Fill Damage Roles
             if (!Object.values(party).some(p => p.role === 'FI')) {
                  const candidates = characterPool.filter(c => c.class === 'FI' && canAssign(c));
                  const best = getBestCandidate(candidates);
@@ -310,7 +324,7 @@
                 neededDamageRoles--;
             }
 
-            // Pass 4: Try to add optional members
+            // Pass 5: Try to add optional members
             const isFullParty = Object.keys(party).length >= 9 && neededSupportRoles.size === 0 && neededDamageRoles <= 0;
             if (isFullParty) {
                  let optionalCandidate = null;
