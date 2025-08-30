@@ -195,12 +195,9 @@
                 
                 if (run1) {
                     const usedCharNamesRun1 = Object.values(run1.party).map(p => p.char.name);
-                    
-                    // CORRECTED LOGIC: Shared weapon group only matters WITHIN a party, not between runs.
                     const remainingChars = allAvailableChars.filter(char => 
                         !usedCharNamesRun1.includes(char.name)
                     );
-                    
                     const playersForRun2 = [...new Set(remainingChars.map(c => c.player))];
                     run2 = findParty(remainingChars, playersForRun2, {}, false);
                 }
@@ -235,11 +232,10 @@
 
             const getBestCandidate = (candidates) => {
                 if (!candidates || candidates.length === 0) return null;
-                // Sort by main, then by class affinity
                 candidates.sort((a, b) => {
                     if (a.isMain !== b.isMain) return a.isMain ? -1 : 1;
                     if (a.classAffinity !== b.classAffinity) return a.classAffinity ? -1 : 1;
-                    return 0; // Keep original order if equal
+                    return 0;
                 });
                 return candidates[0];
             };
@@ -248,8 +244,6 @@
             const neededSupportRoles = new Set(supportRoles);
             let neededDamageRoles = 4;
 
-            // --- ROLE-BASED ASSIGNMENT ---
-            
             // Pass 1: Handle fixed priorities (Bishop)
             const bishopCandidates = characterPool.filter(c => c.class === 'Bishop' && canAssign(c));
             const ahraAsBishop = bishopCandidates.find(c => c.player === 'Ahra' && c.isMain);
@@ -290,7 +284,7 @@
                 }
             }
 
-            // 3b: Fill remaining support roles with the best available candidates (other mains or alts).
+            // 3b: Fill remaining support roles with the best available candidates.
             for (const role of [...neededSupportRoles]) {
                 const candidates = characterPool.filter(c => c.class === role && canAssign(c));
                 const best = getBestCandidate(candidates);
@@ -338,7 +332,6 @@
                  if (optionalCandidate) assign(optionalCandidate.class, optionalCandidate);
             }
             
-            // --- FINAL CHECKS ---
             const filledSupports = Object.values(party).filter(p => supportRoles.includes(p.role));
             const filledDamage = Object.values(party).filter(p => ['DD', 'FI'].includes(p.role));
             const success = filledSupports.length === supportRoles.length && filledDamage.length >= 4;
@@ -365,14 +358,14 @@
             placeholder.classList.add('hidden');
             resultsContainer.innerHTML = '';
             
-            let remainingForRun2 = allChars;
+            let run1UsedChars = []; // CORRECTED: Declare variable in a shared scope
+
             if (run1) {
-                const run1UsedChars = Object.values(run1.party).map(p => p.char.name);
-                remainingForRun2 = allChars.filter(c => !run1UsedChars.includes(c.name));
+                run1UsedChars = Object.values(run1.party).map(p => p.char.name);
                 resultsContainer.appendChild(createPartyCard('Run 1', run1, allChars));
             }
             if (run2) {
-                const run2UsedChars = Object.values(run2.party).map(p => p.char.name);
+                // Now this can safely access run1UsedChars
                 const remainingForRun2Context = allChars.filter(c => !run1UsedChars.includes(c.name));
                 resultsContainer.appendChild(createPartyCard('Run 2', run2, remainingForRun2Context));
             }
