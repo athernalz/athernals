@@ -2,37 +2,32 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Rapidfire Random Word</title>
-  <meta http-equiv="refresh" content="30"> <!-- Reload page every 30s -->
+  <title>Random Word</title>
 </head>
 <body>
+<pre id="randomword"></pre>
+
 <script>
-// Your list of words
-const words = [
-  "IForgotHowToAim","IForgotHowToHeal","TruePacifist","BulletproofForeheads",
-  "FullyImmersed","DisableOneMovementKey","MechanicsOnStrike","IForgotHowToShoot",
-  "IForgotHowToSwim","LeaveTheGunsToMe","DoAKickflip","KilogramOfFeathers",
-  "Autopilot","DrunkPlayer","AkimboBABY","ItsEasierToRead","EverybodyBleedNow",
-  "PacketLoss","BombasticImpact","EyeForAnEye","INeedSomeHelp","FullClip",
-  "NoOneCanHurtMe","ThugsArmoury","ProfessionalsKit","NuttersToys",
-  "MinigunMadness","TurnUpTheHeat","TurnDownTheHeat","IDoAsIPlease",
-  "FastestManAlive","ThisSeemsStrange","ThermalVision","ObjectsAreTiny",
-  "TinyPeepoPeds","TinyPeepoHappy","TippingPoint","AllDriversAreCriminals",
-  "LifesABeach","HicksVille","BlueSuedeShoes","SurroundedByNutters",
-  "CrazyTown","OnlyHomiesAllowed","BetterStayIndoors"
-];
+  // List of words
+  const words = [
+    "IForgotHowToAim","IForgotHowToHeal","TruePacifist","BulletproofForeheads",
+    "FullyImmersed","DisableOneMovementKey","MechanicsOnStrike","IForgotHowToShoot",
+    "IForgotHowToSwim","LeaveTheGunsToMe","DoAKickflip","KilogramOfFeathers",
+    "Autopilot","DrunkPlayer","AkimboBABY","ItsEasierToRead","EverybodyBleedNow",
+    "PacketLoss","BombasticImpact","EyeForAnEye","INeedSomeHelp","FullClip",
+    "NoOneCanHurtMe","ThugsArmoury","ProfessionalsKit","NuttersToys",
+    "MinigunMadness","TurnUpTheHeat","TurnDownTheHeat","IDoAsIPlease",
+    "FastestManAlive","ThisSeemsStrange","ThermalVision","ObjectsAreTiny",
+    "TinyPeepoPeds","TinyPeepoHappy","TippingPoint","AllDriversAreCriminals",
+    "LifesABeach","HicksVille","BlueSuedeShoes","SurroundedByNutters",
+    "CrazyTown","OnlyHomiesAllowed","BetterStayIndoors"
+  ];
 
-// Pick a random word
-const word = words[Math.floor(Math.random()*words.length)];
+  // Pick a random word
+  const word = words[Math.floor(Math.random() * words.length)];
 
-// Output word to the page
-document.body.innerHTML = `<pre id="randomword">${word}</pre>`;
-
-// Optionally, save it to a .txt file if you want Nightbot to fetch
-fetch('randomword.txt', {
-  method: 'PUT',
-  body: word
-});
+  // Output the word to the page (Nightbot can fetch it)
+  document.body.innerText = word;
 </script>
 </body>
 </html>
