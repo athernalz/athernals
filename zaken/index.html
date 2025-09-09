@@ -54,20 +54,24 @@
     <div class="w-full max-w-6xl mx-auto">
         <header class="text-center mb-8">
             <h1 class="text-4xl md:text-5xl font-bold text-white tracking-wider">
-                Zaken Generator <span class="text-lg align-middle text-gray-500 font-medium">v2.0</span>
+                Zaken Generator <span class="text-lg align-middle text-gray-500 font-medium">v2.1</span>
             </h1>
         </header>
 
         <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Controls Column -->
             <div class="lg:col-span-1 card rounded-lg p-6 shadow-lg">
                 <div id="controls">
+                    <!-- People Selection -->
                     <div>
                         <h2 class="text-xl font-semibold mb-3 border-b-2 border-gray-600 pb-2">1. Select Available People</h2>
                         <div id="player-list" class="grid grid-cols-3 gap-2 max-h-[30rem] overflow-y-auto pr-2">
-                            </div>
+                            <!-- Player cards will be injected here -->
+                        </div>
                         <p class="mt-4 text-lg font-medium">Selected People: <span id="selected-count" class="font-bold text-white">0</span></p>
                     </div>
 
+                    <!-- Run Selection -->
                     <div class="mt-6">
                         <h2 class="text-xl font-semibold mb-3 border-b-2 border-gray-600 pb-2">2. Select Number of Runs</h2>
                         <div class="flex items-center space-x-6">
@@ -82,6 +86,7 @@
                         </div>
                     </div>
 
+                    <!-- Generate Button -->
                     <div class="mt-8">
                          <button id="generate-btn" class="w-full btn-primary text-white font-bold py-3 px-4 rounded-lg text-lg shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-300">
                             Generate Party
@@ -90,17 +95,20 @@
                 </div>
             </div>
 
+            <!-- Results Column -->
             <div id="results-container" class="lg:col-span-2 space-y-6">
-                 <div id="placeholder" class="card rounded-lg p-8 h-full flex items-center justify-center text-center">
+                 <!-- Placeholder -->
+                <div id="placeholder" class="card rounded-lg p-8 h-full flex items-center justify-center text-center">
                     <div>
                         <svg class="mx-auto h-16 w-16 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                             <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         <h3 class="mt-2 text-lg font-medium text-white">Your generated parties will appear here.</h3>
-                        <p class="mt-1 text-gray-400">Select at least 9 people and click generate.</p>
+                        <p class="mt-1 text-gray-400">Select your crew and click generate.</p>
                     </div>
                 </div>
-                </div>
+                <!-- Generated parties will be injected here -->
+            </div>
         </main>
     </div>
 
@@ -159,64 +167,64 @@
             const selectedPlayerNames = getSelectedPlayers();
             const numRuns = parseInt(document.querySelector('input[name="runs"]:checked').value, 10);
 
-            if (selectedPlayerNames.length < 9) {
-                renderError("Not enough people!", "You need to select at least 9 people to form a full party.");
+            if (selectedPlayerNames.length === 0) {
+                 renderError("No one selected!", "Please select at least one person.");
                 return;
             }
 
-            const playerMains = new Map();
             const allAvailableChars = selectedPlayerNames.flatMap(name => {
                 const player = playerData.find(p => p.name === name);
                 return player.characters.map(char => {
                     const isHumaxMain = player.name === 'Humax' && char.name === 'iHumax';
                     const isStandardMain = player.name.toLowerCase() === char.name.toLowerCase();
-                    const isGalenaMain = player.name === 'Galena' && char.class === 'Bishop';
-                    const isMain = isHumaxMain || isStandardMain || isGalenaMain;
-                    if (isMain) playerMains.set(player.name, char.class);
-                    return { player: player.name, isMain, ...char };
+                    return { player: player.name, isMain: isHumaxMain || isStandardMain, ...char };
                 });
             });
-
-            allAvailableChars.forEach(char => {
-                const mainClass = playerMains.get(char.player);
-                char.classAffinity = (mainClass === char.class);
-            });
-
 
             let run1 = null, run2 = null;
 
             if (numRuns === 2) {
+                const strongDdPool = allAvailableChars.filter(c => c.strength === 'high');
+                const cwPool = allAvailableChars.filter(c => c.special === 'CW');
                 const run1Limits = {
-                    maxCw: Math.ceil(allAvailableChars.filter(c => c.special === 'CW').length / 2),
-                    maxStrongDDs: Math.ceil(allAvailableChars.filter(c => c.strength === 'high').length / 2)
+                    maxCw: Math.ceil(cwPool.length / 2),
+                    maxStrongDDs: Math.ceil(strongDdPool.length / 2)
                 };
 
-                run1 = findParty(allAvailableChars, selectedPlayerNames, run1Limits, true);
-                
-                if (run1) {
-                    const usedCharNamesRun1 = Object.values(run1.party).map(p => p.char.name);
-                    const remainingChars = allAvailableChars.filter(char => 
-                        !usedCharNamesRun1.includes(char.name)
-                    );
-                    const playersForRun2 = [...new Set(remainingChars.map(c => c.player))];
-                    run2 = findParty(remainingChars, playersForRun2, {}, false);
+                const supportRoles = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS'];
+                const criticalProviders = new Map();
+                for (const role of supportRoles) {
+                    const providers = [...new Set(allAvailableChars.filter(c => c.class === role).map(c => c.player))];
+                    if (providers.length <= 2 && providers.length > 0) { 
+                        providers.forEach(p => {
+                            if (!criticalProviders.has(p)) criticalProviders.set(p, []);
+                            criticalProviders.get(p).push(role);
+                        });
+                    }
                 }
+                
+                run1 = findParty(allAvailableChars, selectedPlayerNames, run1Limits, false, criticalProviders);
+                
+                const usedCharNamesRun1 = Object.values(run1.party).map(p => p.char.name);
+                const remainingChars = allAvailableChars.filter(char => !usedCharNamesRun1.includes(char.name));
+                const playersForRun2 = [...new Set(remainingChars.map(c => c.player))];
+
+                run2 = findParty(remainingChars, playersForRun2, {}, true, new Map());
             } else {
-                run1 = findParty(allAvailableChars, selectedPlayerNames, {}, false);
+                run1 = findParty(allAvailableChars, selectedPlayerNames, {}, true, new Map());
             }
             
             renderResults(run1, run2, allAvailableChars);
         }
         
-        function findParty(characterPool, availablePlayerNames, limits = {}, isBalancingRun1 = false) {
+        function findParty(characterPool, availablePlayerNames, limits = {}, isGreedy = true, criticalProviders = new Map()) {
             const party = {};
-            const { maxCw = Infinity, maxStrongDDs = Infinity } = limits;
             
             let cwCount = 0;
             let strongDdCount = 0;
-            
+            const { maxCw = Infinity, maxStrongDDs = Infinity } = limits;
+
             const canAssign = (char) => {
-                if (!char) return false;
                 if (party[char.player] || Object.values(party).some(p => p.char.name === char.name)) return false;
                 if (char.special === 'CW' && cwCount >= maxCw) return false;
                 if (char.strength === 'high' && strongDdCount >= maxStrongDDs) return false;
@@ -229,115 +237,99 @@
                 if (char.special === 'CW') cwCount++;
                 if (char.strength === 'high') strongDdCount++;
             };
-
-            const getBestCandidate = (candidates) => {
-                if (!candidates || candidates.length === 0) return null;
-                candidates.sort((a, b) => {
-                    if (a.isMain !== b.isMain) return a.isMain ? -1 : 1;
-                    if (a.classAffinity !== b.classAffinity) return a.classAffinity ? -1 : 1;
-                    return 0;
-                });
-                return candidates[0];
-            };
             
             const supportRoles = ['Bishop', 'Recharger', 'COV', 'BD', 'SWS'];
             const neededSupportRoles = new Set(supportRoles);
             let neededDamageRoles = 4;
 
-            // Pass 1: Handle fixed priorities (Bishop)
-            const bishopCandidates = characterPool.filter(c => c.class === 'Bishop' && canAssign(c));
-            const ahraAsBishop = bishopCandidates.find(c => c.player === 'Ahra' && c.isMain);
-            const galenaAsBishop = bishopCandidates.find(c => c.player === 'Galena' && c.isMain);
-            if (canAssign(ahraAsBishop)) {
-                assign('Bishop', ahraAsBishop);
-                neededSupportRoles.delete('Bishop');
-            } else if (canAssign(galenaAsBishop)) {
-                assign('Bishop', galenaAsBishop);
-                neededSupportRoles.delete('Bishop');
+            // Pass 1: Assign ALL mains to their role if possible.
+            characterPool.forEach(char => {
+                if (!char.isMain || !canAssign(char)) return;
+
+                if (neededSupportRoles.has(char.class)) {
+                    assign(char.class, char);
+                    neededSupportRoles.delete(char.class);
+                } else if (char.class === 'FI' && neededDamageRoles > 0) {
+                    assign('FI', char);
+                    neededDamageRoles--;
+                } else if (char.class === 'DD' && neededDamageRoles > 0) {
+                    assign('DD', char);
+                    neededDamageRoles--;
+                }
+            });
+
+            // Pass 2: Fill remaining essential support roles.
+            for (const role of [...neededSupportRoles]) {
+                const candidates = characterPool.filter(c => c.class === role && canAssign(c));
+                if (candidates.length === 0) continue;
+
+                // Specific COV strategy for Run 1
+                if (role === 'COV' && !isGreedy) {
+                    const humaxCov = candidates.find(c => c.name === 'Humax'); // Corrected char name check
+                    if (humaxCov) { 
+                        assign(role, humaxCov);
+                    } else { // Fallback to standard logic if Humax COV not available
+                        const romeowCov = candidates.find(c => c.name === 'Romeow'); // Corrected char name check
+                        if (candidates.length > 1 && romeowCov) {
+                           const otherCov = candidates.find(c => c.name !== 'Romeow');
+                           if(otherCov) assign(role, otherCov);
+                           else assign(role, romeowCov);
+                        } else if (candidates.length > 0) {
+                           assign(role, candidates[0]);
+                        }
+                    }
+                } else { // Standard logic for other roles/runs
+                    candidates.sort((a, b) => {
+                        const scoreA = (criticalProviders.has(a.player) ? 0 : 5);
+                        const scoreB = (criticalProviders.has(b.player) ? 0 : 5);
+                        return scoreB - scoreA;
+                    });
+                    assign(role, candidates[0]);
+                }
+                neededSupportRoles.delete(role);
             }
 
-            // Pass 2: If balancing for Run 1, handle special strategic priorities
-            if (isBalancingRun1) {
-                // NEW: Prioritize MrA on COV for Run 1
-                if (neededSupportRoles.has('COV')) {
-                    const mraAsCov = characterPool.find(c => c.player === 'MrA' && c.name === 'Humax' && c.class === 'COV');
-                    if (canAssign(mraAsCov)) {
-                        assign('COV', mraAsCov);
-                        neededSupportRoles.delete('COV');
-                    }
-                }
-
-                // Prioritize the FI Synergy case
-                const fiMain = characterPool.find(c => c.class === 'FI' && c.isMain && canAssign(c));
-                if (fiMain) {
-                    assign('FI', fiMain);
+            // Pass 3: Fill remaining damage roles.
+            if (neededDamageRoles > 0 && !Object.values(party).some(p => p.role === 'FI')) {
+                const fiCandidates = characterPool.filter(c => c.class === 'FI' && canAssign(c));
+                if (fiCandidates.length > 0) {
+                    assign('FI', fiCandidates[0]);
                     neededDamageRoles--;
-                    const fiPreferredDDs = characterPool.filter(c => ['Xamuh', 'IWontHitYou', 'Dreamhack'].includes(c.name) && canAssign(c));
-                    if (fiPreferredDDs.length > 0) {
-                        assign('DD', fiPreferredDDs[0]);
-                        neededDamageRoles--;
-                    }
                 }
             }
             
-            // Pass 3: Fill remaining support roles with "critical mains" first
-            for (const role of [...neededSupportRoles]) {
-                const mainCandidatesForRole = characterPool.filter(c => c.class === role && c.isMain && canAssign(c));
-                const uniquePlayers = [...new Set(mainCandidatesForRole.map(c => c.player))];
-                if (uniquePlayers.length === 1) {
-                    const criticalMain = mainCandidatesForRole[0];
-                    if (canAssign(criticalMain)) {
-                        assign(role, criticalMain);
-                        neededSupportRoles.delete(role);
-                    }
-                }
-            }
+            while(neededDamageRoles > 0) {
+                const ddCandidates = characterPool.filter(c => c.class === 'DD' && canAssign(c));
+                if (ddCandidates.length === 0) break; 
 
-            for (const role of [...neededSupportRoles]) {
-                const candidates = characterPool.filter(c => c.class === role && canAssign(c));
-                const best = getBestCandidate(candidates);
-                if (best) {
-                    assign(role, best);
-                    neededSupportRoles.delete(role);
-                }
-            }
-
-            // Pass 4: Fill Damage Roles
-            if (!Object.values(party).some(p => p.role === 'FI')) {
-                 const candidates = characterPool.filter(c => c.class === 'FI' && canAssign(c));
-                 const best = getBestCandidate(candidates);
-                 if (best) {
-                     assign('FI', best);
-                     neededDamageRoles--;
-                 }
-            }
-
-            while (neededDamageRoles > 0) {
-                const candidates = characterPool.filter(c => c.class === 'DD' && canAssign(c));
-                if (candidates.length === 0) break;
-                
-                candidates.sort((a, b) => {
-                    const scoreA = (a.isMain ? 100 : 0) + (a.classAffinity ? 50 : 0) + (a.strength === 'high' ? 10 : 0);
-                    const scoreB = (b.isMain ? 100 : 0) + (b.classAffinity ? 50 : 0) + (b.strength === 'high' ? 10 : 0);
+                ddCandidates.sort((a, b) => {
+                    const scoreA = (a.special === 'CW' ? 10 : 0) + (criticalProviders.has(a.player) ? 0 : 5);
+                    const scoreB = (b.special === 'CW' ? 10 : 0) + (criticalProviders.has(b.player) ? 0 : 5);
                     return scoreB - scoreA;
                 });
-
-                assign('DD', candidates[0]);
+                assign('DD', ddCandidates[0]);
                 neededDamageRoles--;
             }
 
-            // Pass 5: Try to add optional members
+            // Pass 4: Try to add optional members (even in run 1 if possible)
             const isFullParty = Object.keys(party).length >= 9 && neededSupportRoles.size === 0 && neededDamageRoles <= 0;
-            if (isFullParty) {
-                 let optionalCandidate = null;
-                 const bishopPlayer = Object.values(party).find(p => p.role === 'Bishop')?.char.player;
-                 if (bishopPlayer && bishopPlayer !== 'Galena') {
-                     optionalCandidate = characterPool.find(c => c.player === 'Galena' && optionalRoles.includes(c.class) && canAssign(c));
-                 }
-                 if (!canAssign(optionalCandidate)) {
-                      optionalCandidate = getBestCandidate(characterPool.filter(c => optionalRoles.includes(c.class) && canAssign(c)));
-                 }
-                 if (optionalCandidate) assign(optionalCandidate.class, optionalCandidate);
+            if (isFullParty || isGreedy) { // Allow optional addition if greedy, regardless of party size
+                let optionalCandidate = null;
+                if (Object.values(party).some(p=>p.role === 'Bishop')) {
+                    optionalCandidate = characterPool.find(c => c.player === 'Galena' && optionalRoles.includes(c.class) && canAssign(c));
+                }
+                if (!optionalCandidate && Object.values(party).some(p=>p.role === 'FI')) {
+                    optionalCandidate = characterPool.find(c => c.player === 'Pap1ll0n' && optionalRoles.includes(c.class) && canAssign(c));
+                }
+                if (!optionalCandidate) {
+                    optionalCandidate = characterPool.find(c => optionalRoles.includes(c.class) && canAssign(c));
+                }
+                if (optionalCandidate) assign(optionalCandidate.class, optionalCandidate);
+
+                if (Object.keys(party).length >= 10) {
+                     const extraDdCandidate = characterPool.find(c => c.class === 'DD' && canAssign(c));
+                     if(extraDdCandidate) assign('DD', extraDdCandidate);
+                }
             }
             
             const filledSupports = Object.values(party).filter(p => supportRoles.includes(p.role));
@@ -349,12 +341,8 @@
                 supportRoles.forEach(role => {
                     if (!filledSupports.some(p => p.role === role)) missingRoles.push(role);
                 });
-                let neededDDs = 4 - filledDamage.length;
-                if (neededDDs > 0 && !Object.values(party).some(p => p.role === 'FI')) {
-                    missingRoles.push('DD/FI');
-                    neededDDs--;
-                }
-                for (let i = 0; i < neededDDs; i++) missingRoles.push('DD');
+                const neededDDs = 4 - filledDamage.length;
+                for (let i = 0; i < neededDDs; i++) missingRoles.push('DD/FI');
             }
             
             const assignedPlayerNames = Object.keys(party);
@@ -366,15 +354,14 @@
             placeholder.classList.add('hidden');
             resultsContainer.innerHTML = '';
             
-            let run1UsedChars = [];
-
+            let remainingForRun2 = allChars;
             if (run1) {
-                run1UsedChars = Object.values(run1.party).map(p => p.char.name);
+                const run1UsedChars = Object.values(run1.party).map(p => p.char.name);
+                remainingForRun2 = allChars.filter(c => !run1UsedChars.includes(c.name));
                 resultsContainer.appendChild(createPartyCard('Run 1', run1, allChars));
             }
             if (run2) {
-                const remainingForRun2Context = allChars.filter(c => !run1UsedChars.includes(c.name));
-                resultsContainer.appendChild(createPartyCard('Run 2', run2, remainingForRun2Context));
+                resultsContainer.appendChild(createPartyCard('Run 2', run2, remainingForRun2));
             }
         }
         
@@ -424,8 +411,7 @@
             const availableCharsSection = document.createElement('div');
             availableCharsSection.className = 'mt-6';
             
-            const availableForThisContext = characterPool.filter(c => !partyCharNames.includes(c.name));
-            if (availableForThisContext.length > 0) {
+            if (characterPool.length > partyCharNames.length) {
                  availableCharsSection.innerHTML = `
                     <button class="show-available-btn btn-secondary text-white font-semibold py-2 px-4 rounded-md text-sm w-full">Show Available Characters</button>
                     <div class="available-chars-list hidden mt-4 p-4 bg-gray-900/50 rounded-lg max-h-48 overflow-y-auto"></div>
@@ -446,11 +432,11 @@
             const showBtn = card.querySelector('.show-available-btn');
             if (showBtn) {
                 showBtn.addEventListener('click', (e) => {
-                    const listContainer = card.querySelector('.available-chars-list');
-                    if (!listContainer) return;
+                    const listContainer = e.target.nextElementSibling;
                     const isHidden = listContainer.classList.contains('hidden');
                     
                     if (isHidden) {
+                        const availableForThisContext = characterPool.filter(c => !partyCharNames.includes(c.name));
                         const groupedByPlayer = availableForThisContext.reduce((acc, char) => {
                             if (!acc[char.player]) acc[char.player] = [];
                             acc[char.player].push(char);
@@ -496,3 +482,4 @@
     </script>
 </body>
 </html>
+
